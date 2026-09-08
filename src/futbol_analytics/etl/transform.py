@@ -183,7 +183,8 @@ def add_identity(frame: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
     result["nation"] = flat["nation"].map(parse_nation) if "nation" in flat.columns else None
     result["age"] = flat["age"].map(parse_age) if "age" in flat.columns else None
     result["born"] = (
-        pd.to_numeric(flat["born"], errors="coerce").astype("Int64") if "born" in flat.columns
+        pd.to_numeric(flat["born"], errors="coerce").astype("Int64")
+        if "born" in flat.columns
         else pd.Series(pd.NA, index=flat.index, dtype="Int64")
     )
 
@@ -212,8 +213,7 @@ def build_player_frame(
     informacion de forma irreversible.
     """
     selected = {
-        stat_type: select_metrics(frame, metrics, stat_type)
-        for stat_type, frame in frames.items()
+        stat_type: select_metrics(frame, metrics, stat_type) for stat_type, frame in frames.items()
     }
     merged = merge_stat_frames(selected)
     if merged.empty:

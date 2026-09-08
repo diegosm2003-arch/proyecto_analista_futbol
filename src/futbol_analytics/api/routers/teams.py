@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from futbol_analytics.api import services
-from futbol_analytics.api.dependencies import get_data_access
-from futbol_analytics.api.repository import DataAccess
+from futbol_analytics.api.dependencies import DataAccessDep
 from futbol_analytics.api.schemas import StyleReport, TeamStyle
 
 router = APIRouter(prefix="/teams", tags=["equipos"])
@@ -16,9 +15,9 @@ router = APIRouter(prefix="/teams", tags=["equipos"])
 @router.get("/styles", summary="Estilos de juego de una temporada")
 def styles(
     season: str,
+    data: DataAccessDep,
     league: str | None = None,
     n_styles: int = Query(default=5, ge=2, le=10),
-    data: DataAccess = Depends(get_data_access),
 ) -> StyleReport:
     """Agrupa a los equipos por estilo de juego.
 

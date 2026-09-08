@@ -35,9 +35,7 @@ class MetricInfo(BaseModel):
     higher_is_better: bool | None = Field(
         description="Nulo cuando la metrica describe estilo y no calidad"
     )
-    possession_sensitive: bool = Field(
-        description="Si se ofrece tambien ajustada por posesion"
-    )
+    possession_sensitive: bool = Field(description="Si se ofrece tambien ajustada por posesion")
 
 
 class RoleInfo(BaseModel):

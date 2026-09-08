@@ -8,10 +8,11 @@ desarrollo local y se sobreescriben con `.env` o con el entorno del contenedor.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 from urllib.parse import quote_plus
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Identificadores de liga tal y como los espera `soccerdata`.
 BIG_5_LEAGUES = [
@@ -55,9 +56,12 @@ class Settings(BaseSettings):
 
     # --- Datos ---
     # Poblacion de referencia para los percentiles: las Big 5, no solo LaLiga.
-    leagues: list[str] = Field(default_factory=lambda: list(BIG_5_LEAGUES))
+    # `NoDecode` es imprescindible: sin el, pydantic-settings intenta parsear
+    # los tipos compuestos como JSON en el propio origen, ANTES de que corra el
+    # validador de abajo, y `LEAGUES=ESP-La Liga,...` revienta el arranque.
+    leagues: Annotated[list[str], NoDecode] = Field(default_factory=lambda: list(BIG_5_LEAGUES))
     # Temporadas en formato corto de soccerdata: "2425" = 2024/25.
-    seasons: list[str] = Field(default_factory=lambda: ["2425", "2526"])
+    seasons: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["2425", "2526"])
     # Directorio de cache del scraping (soccerdata). Fuera de Git, en el
     # volumen de datos: sin cache, cada ejecucion vuelve a descargar FBref.
     soccerdata_dir: str = "/app/data/soccerdata"

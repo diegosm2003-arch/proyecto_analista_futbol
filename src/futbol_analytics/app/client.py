@@ -122,9 +122,7 @@ class ApiClient:
         limpios = {clave: valor for clave, valor in (params or {}).items() if valor is not None}
 
         try:
-            respuesta = requests.get(
-                f"{self.base_url}{path}", params=limpios, timeout=self.timeout
-            )
+            respuesta = requests.get(f"{self.base_url}{path}", params=limpios, timeout=self.timeout)
         except requests.RequestException as error:
             raise ApiError(f"No se ha podido contactar con la API: {error}") from error
 

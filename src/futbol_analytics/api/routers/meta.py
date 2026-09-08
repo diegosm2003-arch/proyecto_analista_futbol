@@ -6,11 +6,10 @@ y el chat los necesitara para saber sobre que puede preguntar.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from futbol_analytics.analysis.roles import ARCHETYPES
-from futbol_analytics.api.dependencies import get_data_access
-from futbol_analytics.api.repository import DataAccess
+from futbol_analytics.api.dependencies import DataAccessDep
 from futbol_analytics.api.schemas import (
     Catalog,
     MetricInfo,
@@ -26,7 +25,7 @@ router = APIRouter(prefix="/meta", tags=["catalogo"])
 
 
 @router.get("/catalog", summary="Temporadas y ligas disponibles")
-def catalog(data: DataAccess = Depends(get_data_access)) -> Catalog:
+def catalog(data: DataAccessDep) -> Catalog:
     return Catalog(
         seasons=data.seasons(),
         leagues=data.leagues(),

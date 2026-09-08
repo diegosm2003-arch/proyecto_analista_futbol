@@ -11,13 +11,12 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from sqlalchemy.exc import SQLAlchemyError
 
 from futbol_analytics import __version__
 from futbol_analytics.api import cache
-from futbol_analytics.api.dependencies import get_data_access
-from futbol_analytics.api.repository import DataAccess
+from futbol_analytics.api.dependencies import DataAccessDep
 from futbol_analytics.api.routers import meta, players, teams
 from futbol_analytics.api.schemas import Health
 from futbol_analytics.logging_config import configure_logging
@@ -64,7 +63,7 @@ app.include_router(teams.router)
 
 
 @app.get("/health", tags=["infra"], summary="Comprobacion de vida")
-def health(data: DataAccess = Depends(get_data_access)) -> Health:
+def health(data: DataAccessDep) -> Health:
     """Estado del servicio y version de los datos cargados.
 
     `data_version` es la marca de la ultima carga correcta del ETL. Sirve para

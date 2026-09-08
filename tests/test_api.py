@@ -147,9 +147,7 @@ def test_una_temporada_sin_datos_da_404(client: TestClient) -> None:
 
 
 def test_el_perfil_devuelve_percentiles_ordenados(client: TestClient) -> None:
-    cuerpo = client.get(
-        "/players/DF 0/profile", params={"season": TEMPORADA}
-    ).json()
+    cuerpo = client.get("/players/DF 0/profile", params={"season": TEMPORADA}).json()
 
     percentiles = [m["percentile"] for m in cuerpo["metrics"] if m["percentile"] is not None]
     assert percentiles == sorted(percentiles, reverse=True)

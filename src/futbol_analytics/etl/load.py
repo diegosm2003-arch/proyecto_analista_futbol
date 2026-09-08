@@ -41,9 +41,7 @@ def build_upsert(table: Table, rows: Sequence[dict]) -> Insert:
     updatable = [
         column.name
         for column in table.columns
-        if column.name not in key_columns
-        and column.name in present
-        and column.name != "updated_at"
+        if column.name not in key_columns and column.name in present and column.name != "updated_at"
     ]
 
     statement = pg_insert(table).values(list(rows))

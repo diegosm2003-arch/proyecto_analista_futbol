@@ -8,6 +8,9 @@ en memoria con `app.dependency_overrides`.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
+
+from fastapi import Depends
 
 from futbol_analytics.api.repository import DataAccess, SqlDataAccess
 from futbol_analytics.db import get_engine
@@ -22,3 +25,10 @@ def _sql_data_access() -> SqlDataAccess:
 def get_data_access() -> DataAccess:
     """Acceso a datos para los endpoints."""
     return _sql_data_access()
+
+
+# Alias para inyectar el acceso a datos en los endpoints. Con `Annotated` la
+# dependencia no viaja como valor por defecto del argumento, que es el estilo
+# que recomienda FastAPI y ademas evita construir el objeto en tiempo de
+# definicion de la funcion.
+DataAccessDep = Annotated[DataAccess, Depends(get_data_access)]

@@ -52,9 +52,7 @@ def test_el_percentil_se_calcula_contra_las_big_5_y_no_contra_laliga() -> None:
 
     resultado = percentiles.compute(jugadores, (GOLES,), min_minutes=450)
 
-    flojo = resultado[
-        (resultado["player"] == "Jugador 0") & (resultado["metric"] == "goals")
-    ]
+    flojo = resultado[(resultado["player"] == "Jugador 0") & (resultado["metric"] == "goals")]
     # Si el percentil se hubiese calculado solo con LaLiga, seria 50.
     assert flojo["percentile_per90"].iloc[0] < 25.0
 

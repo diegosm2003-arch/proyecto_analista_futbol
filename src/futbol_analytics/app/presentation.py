@@ -63,18 +63,14 @@ def prepare_pizza(profile: dict[str, Any], template: list[dict[str, Any]]) -> Pi
     if ausentes:
         logger.info("Metricas sin percentil en el perfil", extra={"metricas": ausentes})
 
-    return PizzaData(
-        labels=etiquetas, values=valores, categories=categorias, missing=ausentes
-    )
+    return PizzaData(labels=etiquetas, values=valores, categories=categorias, missing=ausentes)
 
 
 def _percentil(valor: float, metrica: str) -> int:
     """Redondea a entero y recorta al rango valido."""
     entero = int(round(valor))
     if entero < MIN_PERCENTILE or entero > MAX_PERCENTILE:
-        logger.warning(
-            "Percentil fuera de rango", extra={"metrica": metrica, "valor": valor}
-        )
+        logger.warning("Percentil fuera de rango", extra={"metrica": metrica, "valor": valor})
     return max(MIN_PERCENTILE, min(MAX_PERCENTILE, entero))
 
 

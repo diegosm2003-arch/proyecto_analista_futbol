@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from futbol_analytics.api import services
-from futbol_analytics.api.dependencies import get_data_access
+from futbol_analytics.api.dependencies import DataAccessDep
 from futbol_analytics.api.repository import DataAccess
 from futbol_analytics.api.schemas import (
     Basis,
@@ -32,6 +32,7 @@ FRAGILE_POPULATION = 50
 @router.get("", summary="Buscar jugadores")
 def search(
     season: str,
+    data: DataAccessDep,
     league: str | None = None,
     position_group: PositionGroup | None = None,
     role: str | None = None,
@@ -40,7 +41,6 @@ def search(
     ),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    data: DataAccess = Depends(get_data_access),
 ) -> list[PlayerSummary]:
     """Lista de jugadores de una temporada, con su rol ya asignado."""
     jugadores = _players(data, season)
@@ -64,10 +64,10 @@ def search(
 def profile(
     player: str,
     season: str,
+    data: DataAccessDep,
     team: str | None = Query(default=None, description="Necesario si cambio de equipo"),
     basis: Basis = "per90",
     population: Population = "position",
-    data: DataAccess = Depends(get_data_access),
 ) -> PlayerProfile:
     """Percentiles de un jugador, listos para un pizza chart.
 
@@ -106,8 +106,7 @@ def profile(
     tamano = services.population_size(todos, season, columna, grupo)
 
     relevantes = {
-        metric.name
-        for metric in metrics_for_position(PLAYER_METRICS, ficha.position_group or "MF")
+        metric.name for metric in metrics_for_position(PLAYER_METRICS, ficha.position_group or "MF")
     }
     seleccion = perfil[perfil["metric"].isin(relevantes)]
     metricas = _metrics(seleccion, basis)

@@ -96,9 +96,7 @@ def _filtros(catalogo: dict) -> dict:
 
 def _selector(jugadores: list[dict]) -> dict:
     """Selector de jugador. Distingue etapas si hubo traspaso."""
-    etiquetas = {
-        f"{j['player']} - {j['team']} ({j['minutes']} min)": j for j in jugadores
-    }
+    etiquetas = {f"{j['player']} - {j['team']} ({j['minutes']} min)": j for j in jugadores}
     elegido = st.selectbox(f"Jugador ({len(jugadores)} encontrados)", list(etiquetas))
     return etiquetas[elegido]
 
@@ -147,9 +145,7 @@ def _perfil(perfil: dict, cliente_templates: list[dict]) -> None:
             st.pyplot(charts.pizza(datos, titulo, subtitulo), use_container_width=False)
             st.markdown(f"**{presentation.summarise_profile(perfil)}**")
             if datos.missing:
-                st.caption(
-                    "Sin datos para: " + ", ".join(datos.missing)
-                )
+                st.caption("Sin datos para: " + ", ".join(datos.missing))
         else:
             st.info("El jugador no tiene percentiles calculables en esta base.")
 

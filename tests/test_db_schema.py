@@ -74,7 +74,7 @@ def test_team_season_guarda_las_dos_perspectivas() -> None:
         "perspective",
     }
     for metric in TEAM_METRICS:
-        assert metric.name in team_season.c.keys()
+        assert metric.name in team_season.c
 
 
 def test_etl_run_registra_el_resultado_de_cada_carga() -> None:
@@ -91,8 +91,17 @@ def _sql(rows: list[dict]) -> str:
 def test_el_upsert_actualiza_en_lugar_de_duplicar() -> None:
     # El ETL se relanza cada semana sobre la temporada en curso y FBref corrige
     # datos a posteriori: relanzar tiene que actualizar, no duplicar.
-    sql = _sql([{"league": "ESP-La Liga", "season": "2526", "team": "Barcelona",
-                 "player": "Pedri", "goals": 3}])
+    sql = _sql(
+        [
+            {
+                "league": "ESP-La Liga",
+                "season": "2526",
+                "team": "Barcelona",
+                "player": "Pedri",
+                "goals": 3,
+            }
+        ]
+    )
 
     assert "on conflict" in sql
     assert "do update" in sql
@@ -100,8 +109,17 @@ def test_el_upsert_actualiza_en_lugar_de_duplicar() -> None:
 
 
 def test_el_upsert_no_reescribe_las_columnas_clave() -> None:
-    sql = _sql([{"league": "ESP-La Liga", "season": "2526", "team": "Barcelona",
-                 "player": "Pedri", "goals": 3}])
+    sql = _sql(
+        [
+            {
+                "league": "ESP-La Liga",
+                "season": "2526",
+                "team": "Barcelona",
+                "player": "Pedri",
+                "goals": 3,
+            }
+        ]
+    )
 
     conflicto, _, actualizacion = sql.partition("do update set")
     assert "excluded.player" not in actualizacion
@@ -112,15 +130,33 @@ def test_el_upsert_no_reescribe_las_columnas_clave() -> None:
 def test_el_upsert_solo_toca_las_columnas_que_vienen_en_los_datos() -> None:
     # Una carga parcial no debe borrar `detailed_position`, que escribe otro
     # proceso (el clustering de la fase 3).
-    sql = _sql([{"league": "ESP-La Liga", "season": "2526", "team": "Barcelona",
-                 "player": "Pedri", "goals": 3}])
+    sql = _sql(
+        [
+            {
+                "league": "ESP-La Liga",
+                "season": "2526",
+                "team": "Barcelona",
+                "player": "Pedri",
+                "goals": 3,
+            }
+        ]
+    )
 
     assert "excluded.detailed_position" not in sql
     assert "excluded.interceptions" not in sql
 
 
 def test_el_upsert_refresca_la_marca_de_tiempo() -> None:
-    sql = _sql([{"league": "ESP-La Liga", "season": "2526", "team": "Barcelona",
-                 "player": "Pedri", "goals": 3}])
+    sql = _sql(
+        [
+            {
+                "league": "ESP-La Liga",
+                "season": "2526",
+                "team": "Barcelona",
+                "player": "Pedri",
+                "goals": 3,
+            }
+        ]
+    )
 
     assert "updated_at = now()" in sql

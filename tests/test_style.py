@@ -17,13 +17,20 @@ def _equipos(n: int = 8) -> pd.DataFrame:
         rival = 1200.0 - dominio  # pases del rival
         filas.append(
             {
-                "league": "ESP-La Liga", "season": "2526", "team": f"Equipo {i}",
-                "perspective": "for", "minutes": 3420.0, "matches_played": 38.0,
-                "passes_attempted": dominio, "passes_completed": dominio * 0.85,
+                "league": "ESP-La Liga",
+                "season": "2526",
+                "team": f"Equipo {i}",
+                "perspective": "for",
+                "minutes": 3420.0,
+                "matches_played": 38.0,
+                "passes_attempted": dominio,
+                "passes_completed": dominio * 0.85,
                 "progressive_passes": dominio * 0.10,
                 "passes_into_final_third": dominio * 0.08,
-                "touches_att_third": dominio * 0.5, "shots": 400.0 + i * 20.0,
-                "npxg": 45.0 + i * 3.0, "goals": 45.0 + i * 3.0,
+                "touches_att_third": dominio * 0.5,
+                "shots": 400.0 + i * 20.0,
+                "npxg": 45.0 + i * 3.0,
+                "goals": 45.0 + i * 3.0,
                 "tackles": 700.0 - i * 40.0,
                 "tackles_att_third": (700.0 - i * 40.0) * (0.1 + i * 0.03),
                 "interceptions": 300.0 - i * 10.0,
@@ -31,14 +38,23 @@ def _equipos(n: int = 8) -> pd.DataFrame:
         )
         filas.append(
             {
-                "league": "ESP-La Liga", "season": "2526", "team": f"Equipo {i}",
-                "perspective": "against", "minutes": 3420.0, "matches_played": 38.0,
-                "passes_attempted": rival, "passes_completed": rival * 0.85,
+                "league": "ESP-La Liga",
+                "season": "2526",
+                "team": f"Equipo {i}",
+                "perspective": "against",
+                "minutes": 3420.0,
+                "matches_played": 38.0,
+                "passes_attempted": rival,
+                "passes_completed": rival * 0.85,
                 "progressive_passes": rival * 0.10,
                 "passes_into_final_third": rival * 0.08,
-                "touches_att_third": rival * 0.5, "shots": 400.0,
-                "npxg": 40.0, "goals": 40.0,
-                "tackles": 600.0, "tackles_att_third": 60.0, "interceptions": 250.0,
+                "touches_att_third": rival * 0.5,
+                "shots": 400.0,
+                "npxg": 40.0,
+                "goals": 40.0,
+                "tackles": 600.0,
+                "tackles_att_third": 60.0,
+                "interceptions": 250.0,
             }
         )
     return pd.DataFrame(filas)

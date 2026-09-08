@@ -74,6 +74,10 @@ class Metric:
 # Jugadores
 # ---------------------------------------------------------------------------
 
+# El catalogo se mantiene con la disposicion compacta de una tabla, que es como
+# se lee y se revisa: un argumento por linea lo haria tres veces mas largo sin
+# ganar claridad. Por eso se excluye del formateador automatico.
+# fmt: off
 PLAYER_METRICS: tuple[Metric, ...] = (
     # --- Volumen de juego. No son metricas de rendimiento: son el denominador.
     Metric("matches_played", "standard", "playing_time_mp", "Partidos jugados",
@@ -207,6 +211,7 @@ PLAYER_METRICS: tuple[Metric, ...] = (
     Metric("post_shot_xg", "keeper_adv", "expected_psxg", "PSxG",
            positions=("GK",), higher_is_better=None, required=False),
 )
+# fmt: on
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +222,7 @@ PLAYER_METRICS: tuple[Metric, ...] = (
 # (perspective="for") y lo que le hacen (perspective="against"). Con ambas se
 # pueden derivar en la fase de analisis indicadores de estilo como una PPDA
 # aproximada: pases del rival por accion defensiva propia.
+# fmt: off
 TEAM_METRICS: tuple[Metric, ...] = (
     Metric("matches_played", "standard", "playing_time_mp", "Partidos jugados",
            dtype="int", per90=False, higher_is_better=None),
@@ -247,6 +253,7 @@ TEAM_METRICS: tuple[Metric, ...] = (
     Metric("possession_pct", "possession", "poss", "Posesion (%)",
            higher_is_better=None, per90=False, required=False),
 )
+# fmt: on
 
 
 def stat_types(metrics: tuple[Metric, ...]) -> tuple[str, ...]:

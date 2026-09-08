@@ -108,9 +108,7 @@ def cluster_styles(teams: pd.DataFrame, n_styles: int = DEFAULT_STYLES) -> Style
     """
     features = build_features(teams)
     if len(features) < n_styles:
-        raise ValueError(
-            f"Hacen falta al menos {n_styles} equipos, hay {len(features)}."
-        )
+        raise ValueError(f"Hacen falta al menos {n_styles} equipos, hay {len(features)}.")
 
     normalizadas = standardise(features)
     modelo = KMeans(n_clusters=n_styles, n_init=10, random_state=RANDOM_STATE)

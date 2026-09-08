@@ -131,9 +131,7 @@ def _to_long(poblacion: pd.DataFrame, metrics: tuple[Metric, ...]) -> pd.DataFra
         # para el resto la columna queda vacia y la interfaz no ofrece el
         # conmutador. Se fuerza a float para que el ranking no vea un object.
         ajustada = f"{metric.name}_padj"
-        pieza[BASIS_PADJ] = (
-            poblacion[ajustada] if ajustada in poblacion.columns else float("nan")
-        )
+        pieza[BASIS_PADJ] = poblacion[ajustada] if ajustada in poblacion.columns else float("nan")
         pieza["higher_is_better"] = metric.higher_is_better
         piezas.append(pieza)
 

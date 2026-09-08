@@ -15,9 +15,11 @@ from typing import Any
 
 # Atributos que `logging` pone en todos los registros. Cualquier otro atributo
 # lo ha anadido quien llama (via `extra=...`) y se incluye en la salida.
-_STANDARD_ATTRS = frozenset(
-    logging.LogRecord("", 0, "", 0, "", None, None).__dict__
-) | {"message", "asctime", "taskName"}
+_STANDARD_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {
+    "message",
+    "asctime",
+    "taskName",
+}
 
 
 class JsonFormatter(logging.Formatter):
