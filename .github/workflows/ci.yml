@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint y tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # No se instala el extra "etl": soccerdata arrastra el scraping y los
+      # tests no tocan la red. Que su imagen construye se comprueba en el job
+      # "docker".
+      - name: Instalar dependencias
+        run: python -m pip install -e ".[analysis,api,app,dev]"
+
+      - name: Ruff (lint)
+        run: python -m ruff check --output-format=github .
+
+      - name: Ruff (formato)
+        run: python -m ruff format --check .
+
+      - name: Tests
+        run: python -m pytest --cov=futbol_analytics --cov-report=term-missing
+
+  docker:
+    name: Construccion de imagenes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [etl, api, app]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Solo se construyen: no se ejecutan ni se publican. Sirve para detectar
+      # un Dockerfile roto desde el equipo de trabajo, donde no hay Docker.
+      - name: Construir imagen ${{ matrix.target }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: false
+          load: false
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}

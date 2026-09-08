@@ -1,0 +1,120 @@
+# Orquestacion de la plataforma.
+#
+#   docker compose up -d                -> postgres + api + app
+#   docker compose --profile etl run --rm etl   -> ejecuta el ETL y termina
+#   docker compose --profile chat up -d ollama  -> levanta Ollama (fase final)
+#
+# El ETL vive en un profile porque es un job por lotes, no un servicio que deba
+# estar siempre en marcha. Ollama tambien, porque es opcional.
+
+name: futbol-analytics
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: futbol-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-futbol}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-futbol}
+      POSTGRES_DB: ${POSTGRES_DB:-futbol}
+    ports:
+      # Expuesto al host para poder inspeccionar los datos con un cliente SQL.
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-futbol} -d ${POSTGRES_DB:-futbol}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  etl:
+    build:
+      context: .
+      target: etl
+    container_name: futbol-etl
+    profiles: ["etl"]
+    env_file:
+      # No falla si aun no existe .env: los valores por defecto de config.py bastan.
+      - path: .env
+        required: false
+    environment:
+      # Dentro de la red de Docker la base de datos se llama "postgres".
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      # Cache de soccerdata sobre el volumen ./data, para no re-scrapear FBref.
+      SOCCERDATA_DIR: /app/data/soccerdata
+    volumes:
+      - ./src:/app/src
+      # Cache de scraping y ficheros intermedios, fuera de Git.
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      target: api
+    container_name: futbol-api
+    restart: unless-stopped
+    env_file:
+      # No falla si aun no existe .env: los valores por defecto de config.py bastan.
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # --reload aprovecha el volumen montado: editar src/ recarga la API.
+    command:
+      - uvicorn
+      - futbol_analytics.api.main:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --reload
+      - --reload-dir=/app/src
+
+  app:
+    build:
+      context: .
+      target: app
+    container_name: futbol-app
+    restart: unless-stopped
+    env_file:
+      # No falla si aun no existe .env: los valores por defecto de config.py bastan.
+      - path: .env
+        required: false
+    environment:
+      # Streamlit habla SIEMPRE con la API, nunca con PostgreSQL.
+      API_BASE_URL: http://api:8000
+    ports:
+      - "${APP_HOST_PORT:-8501}:8501"
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      api:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: futbol-ollama
+    profiles: ["chat"]
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_HOST_PORT:-11434}:11434"
+    volumes:
+      # Los modelos son pesados y no van a Git: viven en un volumen Docker.
+      - ollama-models:/root/.ollama
+
+volumes:
+  pgdata:
+  ollama-models:

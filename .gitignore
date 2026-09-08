@@ -1,0 +1,51 @@
+# --- Datos y modelos: nunca en Git, solo el codigo que los genera ---
+data/*
+!data/.gitkeep
+!data/raw/
+data/raw/*
+!data/raw/.gitkeep
+!data/processed/
+data/processed/*
+!data/processed/.gitkeep
+models/
+*.csv
+*.parquet
+*.db
+*.sqlite3
+
+# --- Secretos ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# --- Test y calidad ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+
+# --- Editores y SO ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Los datos de ejemplo de los tests si se versionan.
+!tests/fixtures/
+!tests/fixtures/**

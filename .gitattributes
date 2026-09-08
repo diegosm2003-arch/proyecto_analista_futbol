@@ -1,0 +1,10 @@
+# El codigo se edita en Windows y se ejecuta en contenedores Linux: se normaliza
+# a LF en el repositorio para que los scripts y los Dockerfile no lleguen con
+# CRLF a la imagen.
+* text=auto eol=lf
+
+# Binarios: nunca se tocan.
+*.png binary
+*.jpg binary
+*.parquet binary
+*.pdf binary

@@ -1,0 +1,210 @@
+"""Endpoints de jugadores: busqueda y perfil de percentiles."""
+
+from __future__ import annotations
+
+import logging
+
+import pandas as pd
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from futbol_analytics.api import services
+from futbol_analytics.api.dependencies import get_data_access
+from futbol_analytics.api.repository import DataAccess
+from futbol_analytics.api.schemas import (
+    Basis,
+    MetricPercentile,
+    PlayerProfile,
+    PlayerSummary,
+    Population,
+    PositionGroup,
+)
+from futbol_analytics.metrics import PLAYER_METRICS, metrics_for_position
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/players", tags=["jugadores"])
+
+# Por debajo de este tamano de poblacion el percentil deja de ser fiable: con 30
+# jugadores, cada posicion vale mas de tres puntos porcentuales.
+FRAGILE_POPULATION = 50
+
+
+@router.get("", summary="Buscar jugadores")
+def search(
+    season: str,
+    league: str | None = None,
+    position_group: PositionGroup | None = None,
+    role: str | None = None,
+    name: str | None = Query(
+        default=None, description="Busqueda parcial, sin distinguir mayusculas"
+    ),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    data: DataAccess = Depends(get_data_access),
+) -> list[PlayerSummary]:
+    """Lista de jugadores de una temporada, con su rol ya asignado."""
+    jugadores = _players(data, season)
+
+    if league:
+        jugadores = jugadores[jugadores["league"] == league]
+    if position_group:
+        jugadores = jugadores[jugadores["position_group"] == position_group]
+    if role:
+        jugadores = jugadores[jugadores["detailed_position"] == role]
+    if name:
+        jugadores = jugadores[
+            jugadores["player"].astype("string").str.contains(name, case=False, na=False)
+        ]
+
+    pagina = jugadores.sort_values("minutes", ascending=False).iloc[offset : offset + limit]
+    return [_summary(fila) for _, fila in pagina.iterrows()]
+
+
+@router.get("/{player}/profile", summary="Perfil de percentiles de un jugador")
+def profile(
+    player: str,
+    season: str,
+    team: str | None = Query(default=None, description="Necesario si cambio de equipo"),
+    basis: Basis = "per90",
+    population: Population = "position",
+    data: DataAccess = Depends(get_data_access),
+) -> PlayerProfile:
+    """Percentiles de un jugador, listos para un pizza chart.
+
+    El percentil se ha calculado contra toda la poblacion de las Big 5 de esa
+    temporada; el filtro por jugador se aplica despues. Solo se devuelven las
+    metricas que tienen sentido para su posicion: mostrar paradas en el perfil
+    de un lateral no es informacion, es ruido.
+    """
+    todos = _percentiles(data, season, population)
+    perfil = todos[(todos["player"] == player) & (todos["season"] == season)]
+    if team:
+        perfil = perfil[perfil["team"] == team]
+
+    if perfil.empty:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"{player!r} no aparece en la temporada {season!r}. Puede no estar cargado "
+                "o no superar el umbral de minutos."
+            ),
+        )
+
+    equipos = perfil["team"].unique()
+    if len(equipos) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{player!r} tiene {len(equipos)} etapas en {season!r} ({', '.join(equipos)}). "
+                "Indica el equipo: sus numeros en cada club son hechos distintos."
+            ),
+        )
+
+    ficha = _summary(perfil.iloc[0])
+    columna = services.population_column(population)
+    grupo = perfil.iloc[0].get(columna)
+    tamano = services.population_size(todos, season, columna, grupo)
+
+    relevantes = {
+        metric.name
+        for metric in metrics_for_position(PLAYER_METRICS, ficha.position_group or "MF")
+    }
+    seleccion = perfil[perfil["metric"].isin(relevantes)]
+    metricas = _metrics(seleccion, basis)
+
+    avisos = _caveats(ficha, population, tamano)
+    if basis == "padj" and all(metrica.percentile is None for metrica in metricas):
+        # Pasa cuando no hay datos de equipo para su liga. El percentil ajustado
+        # solo se calcula entre jugadores con posesion conocida, asi que si falta
+        # no hay ajuste que mostrar.
+        avisos.append(
+            "No hay posesion de equipo para esta liga: el ajuste por posesion no "
+            "esta disponible. Usa basis=per90."
+        )
+
+    return PlayerProfile(
+        player=ficha,
+        basis=basis,
+        population=population,
+        population_group=None if pd.isna(grupo) else grupo,
+        population_size=tamano,
+        caveats=avisos,
+        metrics=metricas,
+    )
+
+
+def _players(data: DataAccess, season: str) -> pd.DataFrame:
+    try:
+        return services.enriched_players(data, season)
+    except services.NoDataError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+def _percentiles(data: DataAccess, season: str, population: str) -> pd.DataFrame:
+    try:
+        return services.player_percentiles(data, season, population)
+    except services.NoDataError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+def _summary(fila: pd.Series) -> PlayerSummary:
+    return PlayerSummary(
+        league=fila["league"],
+        season=fila["season"],
+        team=fila["team"],
+        player=fila["player"],
+        position_group=_opcional(fila.get("position_group")),
+        detailed_position=_opcional(fila.get("detailed_position")),
+        minutes=None if pd.isna(fila.get("minutes")) else int(fila["minutes"]),
+    )
+
+
+def _metrics(perfil: pd.DataFrame, basis: Basis) -> list[MetricPercentile]:
+    columna = f"percentile_{basis}"
+    ordenado = perfil.sort_values(columna, ascending=False, na_position="last")
+    return [
+        MetricPercentile(
+            metric=fila["metric"],
+            label=fila["label"],
+            total=_numero(fila.get("value")),
+            per90=_numero(fila.get("per90")),
+            padj=_numero(fila.get("padj")),
+            percentile=_numero(fila.get(columna)),
+            higher_is_better=_booleano(fila.get("higher_is_better")),
+        )
+        for _, fila in ordenado.iterrows()
+    ]
+
+
+def _caveats(ficha: PlayerSummary, population: str, tamano: int) -> list[str]:
+    """Advertencias de lectura que acompanan al perfil.
+
+    Se devuelven desde la API y no desde la interfaz para que las vea tambien
+    quien consuma los endpoints directamente, incluido el chat.
+    """
+    avisos = []
+    if tamano and tamano < FRAGILE_POPULATION:
+        avisos.append(
+            f"La poblacion de comparacion son solo {tamano} jugadores: el percentil es fragil."
+        )
+    if population == "position" and ficha.position_group == "DF":
+        avisos.append(
+            "El grupo DF mezcla centrales y laterales. Para una comparacion mas fina, "
+            "pide population=role."
+        )
+    if ficha.detailed_position is None and ficha.position_group != "GK":
+        avisos.append("Sin rol asignado: no ha superado el umbral de minutos.")
+    return avisos
+
+
+def _opcional(valor: object) -> str | None:
+    return None if valor is None or pd.isna(valor) else str(valor)
+
+
+def _numero(valor: object) -> float | None:
+    return None if valor is None or pd.isna(valor) else float(valor)
+
+
+def _booleano(valor: object) -> bool | None:
+    """Normaliza booleanos de numpy, que pydantic no acepta tal cual."""
+    return None if valor is None or pd.isna(valor) else bool(valor)
