@@ -77,7 +77,14 @@ def health(data: DataAccessDep) -> Health:
     """
     try:
         version_datos = data.version()
+        ultimas = data.last_runs(1)
+        estado_etl = ultimas[0]["status"] if ultimas else None
     except SQLAlchemyError:
         logger.warning("PostgreSQL no responde al comprobar la version de los datos")
-        version_datos = "desconocida"
-    return Health(status="ok", version=__version__, data_version=version_datos)
+        version_datos, estado_etl = "desconocida", None
+    return Health(
+        status="ok",
+        version=__version__,
+        data_version=version_datos,
+        last_etl_status=estado_etl,
+    )

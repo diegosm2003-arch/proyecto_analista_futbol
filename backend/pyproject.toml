@@ -31,6 +31,15 @@ etl = [
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
 ]
+# Planificacion de la carga. Aparte del extra "etl" para que los tests del
+# planificador se puedan ejecutar sin instalar soccerdata, que arrastra el
+# scraping entero.
+scheduler = [
+    "apscheduler>=3.10",
+    # zoneinfo necesita la base de datos de zonas horarias, que la imagen slim
+    # no incluye. El paquete la aporta sin depender del sistema.
+    "tzdata>=2024.1",
+]
 # Capa de servicio.
 api = [
     "fastapi>=0.115",

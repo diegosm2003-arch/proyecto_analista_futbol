@@ -369,3 +369,67 @@ def test_con_la_temporada_empezada_el_perfil_avisa(
 
     assert cuerpo["min_minutes_applied"] == 108
     assert any("Temporada empezada" in aviso for aviso in cuerpo["caveats"])
+
+
+# --- Estado del ETL ---------------------------------------------------------
+
+
+def test_health_informa_del_ultimo_intento_de_carga(client: TestClient) -> None:
+    # `data_version` sola enmascara un problema: si la carga programada falla,
+    # la fecha de la ultima carga correcta sigue ahi tan tranquila.
+    cuerpo = client.get("/health").json()
+
+    assert cuerpo["last_etl_status"] == "success"
+
+
+def test_el_historial_de_cargas_se_publica(client: TestClient) -> None:
+    ejecuciones = client.get("/meta/etl").json()
+
+    assert len(ejecuciones) == 1
+    assert ejecuciones[0]["status"] == "success"
+    assert ejecuciones[0]["player_rows"] == 123
+
+
+def test_una_carga_fallida_se_ve_en_health(
+    equipos: pd.DataFrame,
+    jugadores: pd.DataFrame,
+) -> None:
+    # Nadie mira los logs de un contenedor: si el ETL programado revienta un
+    # martes de madrugada, tiene que verse en la interfaz.
+    from datetime import UTC, datetime
+
+    from futbol_analytics.api import cache
+    from futbol_analytics.api.dependencies import get_data_access
+    from futbol_analytics.api.main import app
+    from tests.conftest import FakeDataAccess
+
+    fallida = [
+        {
+            "id": 2,
+            "status": "failed",
+            "started_at": datetime(2026, 9, 8, 6, 0, tzinfo=UTC),
+            "finished_at": datetime(2026, 9, 8, 6, 2, tzinfo=UTC),
+            "leagues": "ESP-La Liga",
+            "seasons": "2627",
+            "player_rows": None,
+            "team_rows": None,
+            "error": "FBref no responde",
+        }
+    ]
+    cache.clear()
+    app.dependency_overrides[get_data_access] = lambda: FakeDataAccess(
+        jugadores, equipos, runs=fallida
+    )
+    try:
+        with TestClient(app) as cliente:
+            salud = cliente.get("/health").json()
+            historial = cliente.get("/meta/etl").json()
+    finally:
+        app.dependency_overrides.clear()
+        cache.clear()
+
+    assert salud["last_etl_status"] == "failed"
+    # La fecha de la ultima carga CORRECTA sigue existiendo: por eso hace falta
+    # el estado aparte.
+    assert salud["data_version"] == "v1"
+    assert historial[0]["error"] == "FBref no responde"

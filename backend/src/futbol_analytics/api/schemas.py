@@ -9,6 +9,7 @@ hallazgos son defendibles.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -24,6 +25,28 @@ class Health(BaseModel):
     status: str
     version: str
     data_version: str = Field(description="Marca de la ultima carga correcta del ETL")
+    last_etl_status: str | None = Field(
+        default=None,
+        description=(
+            "Estado del ultimo intento de carga: success, failed, running o stale. "
+            "Puede ser 'failed' aunque data_version tenga fecha, si el ultimo "
+            "intento no llego a terminar"
+        ),
+    )
+
+
+class EtlRun(BaseModel):
+    """Una ejecucion del ETL."""
+
+    id: int
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    leagues: str
+    seasons: str
+    player_rows: int | None
+    team_rows: int | None
+    error: str | None
 
 
 class MetricInfo(BaseModel):

@@ -79,6 +79,24 @@ class Settings(BaseSettings):
     # temporada va disputada. Con la temporada terminada no cambia nada.
     min_minutes_ratio: float = 0.3
 
+    # --- Planificacion del ETL ---
+    # Martes y jueves a las 6:00. Las estadisticas de temporada solo cambian
+    # cuando se juega una jornada: LaLiga juega de viernes a lunes, con alguna
+    # jornada entre semana. Cargar a diario multiplicaria por siete las
+    # peticiones a FBref para uno o dos cambios reales.
+    #
+    # Los dias van por NOMBRE y no por numero a proposito: APScheduler numera
+    # los dias con 0 = lunes, mientras que el cron de toda la vida usa
+    # 0 = domingo. Escrito "2,4" acabaria cargando miercoles y viernes, y el
+    # viernes es antes de la jornada, no despues.
+    etl_schedule: str = "0 6 * * tue,thu"
+    # Zona horaria del planificador. Madrid y no UTC para que "el martes por la
+    # manana" signifique lo que parece durante todo el ano.
+    schedule_timezone: str = "Europe/Madrid"
+    # Cargar nada mas arrancar el planificador. Util la primera vez, para no
+    # esperar al martes.
+    etl_run_on_start: bool = False
+
     # --- Observabilidad ---
     log_level: str = "INFO"
 

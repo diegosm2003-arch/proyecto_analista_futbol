@@ -108,6 +108,32 @@ services:
     entrypoint: ["python", "-m", "futbol_analytics.etl"]
     command: []
 
+  scheduler:
+    # Misma imagen que el backend: solo cambia como se arranca. No es un cron
+    # del sistema sino un proceso Python, porque la imagen no trae cron, corre
+    # como usuario sin privilegios, y cron ni escribe en stdout ni hereda el
+    # entorno del contenedor.
+    image: futbol-analytics-backend:latest
+    build:
+      context: ./backend
+    container_name: futbol-scheduler
+    profiles: ["scheduler"]
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      SOCCERDATA_DIR: /app/data/soccerdata
+    volumes:
+      - ./backend/src:/app/src
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "futbol_analytics.etl.scheduler"]
+
   ollama:
     image: ollama/ollama:latest
     container_name: futbol-ollama

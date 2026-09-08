@@ -144,6 +144,51 @@ docker compose --profile etl run --rm etl
 > lo indica en los `caveats` de cada perfil. Sirve para probar la cadena de
 > extremo a extremo; no para sacar conclusiones.
 
+### Carga programada
+
+```bash
+docker compose --profile scheduler up -d
+```
+
+Levanta un contenedor que ejecuta el ETL de forma periodica. Por defecto,
+**martes y jueves a las 6:00 hora de Madrid**: las estadisticas de temporada
+solo cambian cuando se juega una jornada, y FBref limita a una peticion cada 7
+segundos, asi que cargar a diario seria castigarlo para nada.
+
+| Variable | Por defecto | Que hace |
+| --- | --- | --- |
+| `ETL_SCHEDULE` | `0 6 * * tue,thu` | Cadencia, en formato cron |
+| `SCHEDULE_TIMEZONE` | `Europe/Madrid` | Para que "el martes por la manana" no dependa del cambio de hora |
+| `ETL_RUN_ON_START` | `false` | Cargar al levantar el contenedor, sin esperar al martes |
+
+> **Los dias van por nombre, no por numero.** APScheduler numera `0 = lunes` y
+> el cron de toda la vida usa `0 = domingo`. Escrito `0 6 * * 2,4` la carga
+> caeria en miercoles y viernes, y el viernes es *antes* de la jornada. Hay un
+> test que fija este comportamiento.
+
+**No es `cron` del sistema sino un proceso Python**, por cuatro razones con esta
+imagen: `python:3.11-slim` no trae `cron`; el contenedor corre como usuario sin
+privilegios; `cron` no escribe en stdout, asi que se perderia el logging
+estructurado justo en las ejecuciones que nadie mira; y `cron` no hereda el
+entorno del contenedor, que es el fallo clasico de "funciona a mano y falla
+programado".
+
+Dos protecciones que hacen segura la automatizacion:
+
+- **Candado sobre `etl_run`.** Dos cargas simultaneas no cargarian nada nuevo y
+  duplicarian la presion sobre FBref. Una ejecucion que lleve mas de 3 horas en
+  marcha se da por muerta, para que un contenedor caido no bloquee para siempre.
+- **La temporada en curso nunca se lee del cache.** `soccerdata` guarda el HTML
+  descargado, lo cual es perfecto para una temporada cerrada y catastrofico para
+  la actual: la carga terminaria con exito cada martes devolviendo los datos de
+  la primera descarga, sin ningun error que mirar. Se puede forzar con
+  `--use-cache` para depurar sin volver a descargar.
+
+Si la carga falla, se ve en `GET /health` (`last_etl_status`), en
+`GET /meta/etl` con el historial completo, y como aviso en la barra lateral de
+la interfaz. La fecha de la ultima carga *correcta* seguiria ahi, y por eso el
+estado va aparte.
+
 ### Otros usos
 
 ```bash
@@ -248,6 +293,7 @@ PostgreSQL. Documentacion interactiva en `/docs`.
 | `GET /meta/catalog` | Temporadas, ligas y umbral de minutos |
 | `GET /meta/metrics` | Catalogo de metricas y como hay que leerlas |
 | `GET /meta/roles` | Los doce roles que asigna el clustering |
+| `GET /meta/etl` | Historial de cargas: estado, filas y errores |
 | `GET /meta/templates` | Ejes del pizza chart por posicion |
 | `GET /players` | Busqueda con filtros por liga, posicion, rol y nombre |
 | `GET /players/{player}/profile` | Perfil de percentiles, listo para el pizza chart |
@@ -337,6 +383,7 @@ Requiere Docker. Solo se ejecuta en el equipo personal.
 cp .env.example .env        # y ajustar POSTGRES_PASSWORD
 docker compose up -d --build                # postgres + backend + frontend
 docker compose --profile etl run --rm etl   # ejecuta el ETL y termina
+docker compose --profile scheduler up -d    # carga programada, martes y jueves
 docker compose --profile chat up -d ollama  # opcional, fase final
 ```
 

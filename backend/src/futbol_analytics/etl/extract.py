@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from futbol_analytics.config import get_settings
+from futbol_analytics.seasons import current_season
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -23,26 +25,57 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _fbref(leagues: list[str], seasons: list[str]) -> Any:
+def needs_fresh_data(seasons: list[str], today: date | None = None) -> bool:
+    """Si la carga incluye la temporada en curso.
+
+    Es la decision que separa un ETL util de uno que parece funcionar: las
+    estadisticas de una temporada cerrada no cambian nunca, pero las de la
+    temporada en curso cambian cada jornada. Leerlas del cache devolveria
+    siempre los datos de la primera descarga, y el ETL terminaria con exito
+    cargando numeros congelados. Es el fallo mas dificil de detectar, porque no
+    hay error que mirar.
+    """
+    return current_season(today) in set(seasons)
+
+
+def _fbref(leagues: list[str], seasons: list[str], *, no_cache: bool) -> Any:
     """Crea el lector de FBref.
 
     `soccerdata` decide donde cachear al importarse, leyendo `SOCCERDATA_DIR`.
     Por eso la variable se fija antes del import y el import es perezoso: con un
     import a nivel de modulo, el cache acabaria en el home del contenedor y se
     perderia al recrearlo.
+
+    Con `no_cache` se descarga de nuevo, pero se sigue guardando (`no_store`
+    queda en falso): el cache se refresca en lugar de desaparecer, asi que una
+    ejecucion posterior con `--use-cache` sigue teniendo de donde tirar.
     """
     settings = get_settings()
     os.environ.setdefault("SOCCERDATA_DIR", settings.soccerdata_dir)
 
     import soccerdata
 
-    return soccerdata.FBref(leagues=leagues, seasons=seasons)
+    return soccerdata.FBref(leagues=leagues, seasons=seasons, no_cache=no_cache)
+
+
+def _resolve_cache(seasons: list[str], use_cache: bool | None) -> bool:
+    """Decide si hay que ignorar el cache. Devuelve el valor de `no_cache`.
+
+    `use_cache=None` deja decidir a la temporada, que es lo que quiere el
+    proceso programado. Forzarlo a verdadero sirve para depurar sin volver a
+    castigar a FBref, que limita a una peticion cada 7 segundos.
+    """
+    if use_cache is not None:
+        return not use_cache
+    return needs_fresh_data(seasons)
 
 
 def read_player_stats(
     stat_types: tuple[str, ...],
     leagues: list[str] | None = None,
     seasons: list[str] | None = None,
+    *,
+    use_cache: bool | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Descarga las tablas de jugadores indicadas.
 
@@ -50,7 +83,13 @@ def read_player_stats(
     `soccerdata` (liga, temporada, equipo, jugador).
     """
     settings = get_settings()
-    reader = _fbref(leagues or settings.leagues, seasons or settings.seasons)
+    temporadas = seasons or settings.seasons
+    no_cache = _resolve_cache(temporadas, use_cache)
+    logger.info(
+        "Descargando jugadores",
+        extra={"temporadas": temporadas, "ignora_cache": no_cache},
+    )
+    reader = _fbref(leagues or settings.leagues, temporadas, no_cache=no_cache)
 
     frames: dict[str, pd.DataFrame] = {}
     for stat_type in stat_types:
@@ -69,6 +108,7 @@ def read_team_stats(
     seasons: list[str] | None = None,
     *,
     opponent: bool = False,
+    use_cache: bool | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Descarga las tablas de equipos.
 
@@ -76,7 +116,12 @@ def read_team_stats(
     lo que permite derivar indicadores de presion como una PPDA aproximada.
     """
     settings = get_settings()
-    reader = _fbref(leagues or settings.leagues, seasons or settings.seasons)
+    temporadas = seasons or settings.seasons
+    reader = _fbref(
+        leagues or settings.leagues,
+        temporadas,
+        no_cache=_resolve_cache(temporadas, use_cache),
+    )
 
     frames: dict[str, pd.DataFrame] = {}
     for stat_type in stat_types:

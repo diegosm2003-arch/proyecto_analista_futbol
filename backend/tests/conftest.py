@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -30,13 +31,36 @@ def logging_intacto() -> Iterator[None]:
     root.setLevel(level)
 
 
+def _ejecucion_correcta() -> dict:
+    """Una carga del ETL terminada con exito."""
+    momento = datetime(2026, 9, 8, 6, 0, tzinfo=UTC)
+    return {
+        "id": 1,
+        "status": "success",
+        "started_at": momento,
+        "finished_at": momento + timedelta(minutes=12),
+        "leagues": "ESP-La Liga",
+        "seasons": "2526",
+        "player_rows": 123,
+        "team_rows": 20,
+        "error": None,
+    }
+
+
 class FakeDataAccess:
     """Acceso a datos en memoria, para testear la API sin PostgreSQL."""
 
-    def __init__(self, players: pd.DataFrame, teams: pd.DataFrame, version: str = "v1") -> None:
+    def __init__(
+        self,
+        players: pd.DataFrame,
+        teams: pd.DataFrame,
+        version: str = "v1",
+        runs: list[dict] | None = None,
+    ) -> None:
         self._players = players
         self._teams = teams
         self._version = version
+        self._runs = runs if runs is not None else [_ejecucion_correcta()]
 
     def version(self) -> str:
         return self._version
@@ -52,6 +76,9 @@ class FakeDataAccess:
 
     def teams(self, season: str) -> pd.DataFrame:
         return self._teams[self._teams["season"] == season].copy()
+
+    def last_runs(self, limit: int = 5) -> list[dict]:
+        return self._runs[:limit]
 
 
 LIGAS = [

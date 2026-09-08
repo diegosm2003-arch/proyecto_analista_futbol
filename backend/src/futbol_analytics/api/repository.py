@@ -45,6 +45,9 @@ class DataAccess(Protocol):
     def teams(self, season: str) -> pd.DataFrame:
         """Filas de `team_season` de una temporada, ambas perspectivas."""
 
+    def last_runs(self, limit: int) -> list[dict]:
+        """Ultimas ejecuciones del ETL, de la mas reciente a la mas antigua."""
+
 
 class SqlDataAccess:
     """Implementacion sobre PostgreSQL."""
@@ -84,6 +87,19 @@ class SqlDataAccess:
     def teams(self, season: str) -> pd.DataFrame:
         consulta = select(team_season).where(team_season.c.season == season)
         return self._read(consulta)
+
+    def last_runs(self, limit: int = 5) -> list[dict]:
+        """Ultimas ejecuciones del ETL.
+
+        Se expone porque `data_version` sola enmascara un problema: si la carga
+        programada falla, la fecha de la ultima carga correcta sigue ahi y la
+        interfaz seguiria mostrandola tan tranquila. Hay que poder ver que el
+        ultimo intento no salio bien.
+        """
+        consulta = select(etl_run).order_by(etl_run.c.started_at.desc()).limit(max(1, int(limit)))
+        with self._engine.connect() as conexion:
+            filas = conexion.execute(consulta).mappings().all()
+        return [dict(fila) for fila in filas]
 
     def _read(self, consulta) -> pd.DataFrame:
         with self._engine.connect() as conexion:

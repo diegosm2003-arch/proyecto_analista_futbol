@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import Engine, Table, func, insert, update
+from sqlalchemy import Engine, Table, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import Insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -25,6 +25,21 @@ logger = logging.getLogger(__name__)
 # suficientemente pequeno para no construir sentencias gigantes: las Big 5 son
 # del orden de 3.000 jugadores por temporada.
 CHUNK_SIZE = 500
+
+# Una ejecucion marcada como "running" mas antigua que esto se da por muerta.
+# Sin este limite, un contenedor que se cae a mitad dejaria una fila colgada y
+# el ETL no volveria a ejecutarse nunca: el candado se convertiria en un cierre
+# permanente, que es peor que no tener candado.
+STALE_RUN_HOURS = 3
+
+
+class EtlAlreadyRunningError(RuntimeError):
+    """Ya hay una carga en marcha.
+
+    No es un fallo: para un proceso programado es motivo de saltarse el turno.
+    Importa porque FBref limita a una peticion cada 7 segundos y dos ETL
+    simultaneos duplican la presion sobre el sin cargar nada nuevo.
+    """
 
 
 def build_upsert(table: Table, rows: Sequence[dict]) -> Insert:
@@ -76,8 +91,43 @@ def upsert(engine: Engine, table: Table, rows: Sequence[dict], chunk_size: int =
 
 
 def start_run(engine: Engine, leagues: Sequence[str], seasons: Sequence[str]) -> int:
-    """Registra el inicio de una ejecucion y devuelve su identificador."""
+    """Registra el inicio de una ejecucion y devuelve su identificador.
+
+    Actua tambien como candado: si ya hay una carga viva, lanza
+    `EtlAlreadyRunningError` en lugar de arrancar una segunda.
+
+    Todo ocurre en una transaccion con la tabla bloqueada. Sin el bloqueo, dos
+    contenedores que arrancasen a la vez podrian comprobar los dos que no hay
+    nadie corriendo y entrar los dos.
+    """
+    limite = datetime.now(UTC) - timedelta(hours=STALE_RUN_HOURS)
+
     with engine.begin() as connection:
+        # Modo de bloqueo que impide otro START simultaneo pero deja leer la
+        # tabla: la API consulta la ultima ejecucion y no debe quedarse esperando.
+        connection.execute(text("LOCK TABLE etl_run IN SHARE ROW EXCLUSIVE MODE"))
+
+        viva = connection.execute(
+            select(etl_run.c.id, etl_run.c.started_at)
+            .where(etl_run.c.status == "running", etl_run.c.started_at > limite)
+            .order_by(etl_run.c.started_at.desc())
+            .limit(1)
+        ).first()
+        if viva is not None:
+            raise EtlAlreadyRunningError(
+                f"Ya hay una carga en marcha (id {viva.id}, iniciada a las {viva.started_at})."
+            )
+
+        # Ejecuciones zombis: se marcan para que no bloqueen y para que quede
+        # constancia de que se quedaron a medias.
+        zombis = connection.execute(
+            update(etl_run)
+            .where(etl_run.c.status == "running", etl_run.c.started_at <= limite)
+            .values(status="stale", error=f"Sin terminar tras {STALE_RUN_HOURS} horas.")
+        ).rowcount
+        if zombis:
+            logger.warning("Ejecuciones abandonadas descartadas", extra={"ejecuciones": zombis})
+
         result = connection.execute(
             insert(etl_run)
             .values(

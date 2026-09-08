@@ -160,3 +160,15 @@ def test_el_upsert_refresca_la_marca_de_tiempo() -> None:
     )
 
     assert "updated_at = now()" in sql
+
+
+# --- Candado del ETL --------------------------------------------------------
+
+
+def test_el_candado_solo_mira_las_ejecuciones_recientes() -> None:
+    # Si un contenedor se cae a mitad, deja una fila en "running" para siempre.
+    # Sin ventana de caducidad el candado se convertiria en un cierre
+    # permanente, que es peor que no tener candado.
+    from futbol_analytics.etl.load import STALE_RUN_HOURS
+
+    assert 0 < STALE_RUN_HOURS <= 24

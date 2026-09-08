@@ -38,7 +38,18 @@ def _estado_de_los_datos() -> None:
         if version in {"sin-datos", "desconocida"}:
             st.warning("Sin datos cargados todavia.")
         else:
-            st.caption(f"Ultima carga del ETL: {version[:16].replace('T', ' ')}")
+            st.caption(f"Ultima carga correcta: {version[:16].replace('T', ' ')}")
+
+        # La fecha de la ultima carga CORRECTA no dice si el ultimo intento
+        # fallo. Con la carga programada esa diferencia importa: sin este aviso,
+        # un ETL roto pasaria semanas sin que nadie se enterase.
+        ultimo = estado.get("last_etl_status")
+        if ultimo == "failed":
+            st.error("La ultima carga del ETL fallo: los datos no estan al dia.")
+        elif ultimo == "stale":
+            st.warning("La ultima carga se quedo a medias.")
+        elif ultimo == "running":
+            st.info("Hay una carga en marcha.")
 
 
 def _acerca_de() -> None:

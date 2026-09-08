@@ -37,6 +37,7 @@ def run(
     load_players: bool = True,
     load_teams: bool = True,
     dry_run: bool = False,
+    use_cache: bool | None = None,
 ) -> RunResult:
     """Ejecuta el ETL completo.
 
@@ -52,8 +53,8 @@ def run(
     _avisar_si_falta_poblacion(leagues)
 
     if dry_run:
-        players = _prepare_players(leagues, seasons) if load_players else None
-        teams = _prepare_teams(leagues, seasons) if load_teams else None
+        players = _prepare_players(leagues, seasons, use_cache) if load_players else None
+        teams = _prepare_teams(leagues, seasons, use_cache) if load_teams else None
         result = RunResult(
             player_rows=0 if players is None else len(players),
             team_rows=0 if teams is None else len(teams),
@@ -68,12 +69,12 @@ def run(
     try:
         player_rows = 0
         if load_players:
-            players = _prepare_players(leagues, seasons)
+            players = _prepare_players(leagues, seasons, use_cache)
             player_rows = load.upsert(engine, player_season, transform.to_records(players))
 
         team_rows = 0
         if load_teams:
-            teams = _prepare_teams(leagues, seasons)
+            teams = _prepare_teams(leagues, seasons, use_cache)
             team_rows = load.upsert(engine, team_season, transform.to_records(teams))
     except Exception as error:
         load.finish_run(engine, run_id, status="failed", error=str(error))
@@ -103,15 +104,29 @@ def _avisar_si_falta_poblacion(leagues: list[str]) -> None:
         )
 
 
-def _prepare_players(leagues: list[str], seasons: list[str]) -> pd.DataFrame:
-    frames = extract.read_player_stats(stat_types(PLAYER_METRICS), leagues, seasons)
+def _prepare_players(
+    leagues: list[str],
+    seasons: list[str],
+    use_cache: bool | None = None,
+) -> pd.DataFrame:
+    frames = extract.read_player_stats(
+        stat_types(PLAYER_METRICS), leagues, seasons, use_cache=use_cache
+    )
     return transform.build_player_frame(frames, PLAYER_METRICS)
 
 
-def _prepare_teams(leagues: list[str], seasons: list[str]) -> pd.DataFrame:
+def _prepare_teams(
+    leagues: list[str],
+    seasons: list[str],
+    use_cache: bool | None = None,
+) -> pd.DataFrame:
     needed = stat_types(TEAM_METRICS)
-    frames_for = extract.read_team_stats(needed, leagues, seasons, opponent=False)
-    frames_against = extract.read_team_stats(needed, leagues, seasons, opponent=True)
+    frames_for = extract.read_team_stats(
+        needed, leagues, seasons, opponent=False, use_cache=use_cache
+    )
+    frames_against = extract.read_team_stats(
+        needed, leagues, seasons, opponent=True, use_cache=use_cache
+    )
     return transform.build_team_frame(frames_for, frames_against, TEAM_METRICS)
 
 

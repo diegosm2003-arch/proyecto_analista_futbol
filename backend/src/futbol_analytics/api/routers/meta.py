@@ -6,12 +6,13 @@ y el chat los necesitara para saber sobre que puede preguntar.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from futbol_analytics.analysis.roles import ARCHETYPES
 from futbol_analytics.api.dependencies import DataAccessDep
 from futbol_analytics.api.schemas import (
     Catalog,
+    EtlRun,
     MetricInfo,
     PizzaTemplate,
     RoleInfo,
@@ -89,3 +90,18 @@ def templates() -> list[PizzaTemplate]:
         )
         for position_group, porciones in PIZZA_TEMPLATES.items()
     ]
+
+
+@router.get("/etl", summary="Ultimas ejecuciones del ETL")
+def etl_runs(
+    data: DataAccessDep,
+    limit: int = Query(default=5, ge=1, le=50),
+) -> list[EtlRun]:
+    """Historial de cargas, de la mas reciente a la mas antigua.
+
+    Sirve para responder a la pregunta que `data_version` no contesta: no solo
+    de cuando son los datos, sino si el ultimo intento de actualizarlos salio
+    bien. Con la carga programada esa diferencia importa, porque nadie mira los
+    logs de un contenedor.
+    """
+    return [EtlRun(**fila) for fila in data.last_runs(limit)]

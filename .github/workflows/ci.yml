@@ -22,7 +22,7 @@ jobs:
           # scraping y los tests no tocan la red. Que su imagen construye se
           # comprueba en el job "docker".
           - project: backend
-            extras: "[analysis,api,dev]"
+            extras: "[analysis,api,scheduler,dev]"
           - project: frontend
             extras: "[dev]"
     defaults:
