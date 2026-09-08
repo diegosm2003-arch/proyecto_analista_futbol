@@ -47,8 +47,9 @@ class Settings(BaseSettings):
     # 0.0.0.0 es lo correcto dentro del contenedor: escucha en la red de Docker.
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    # URL con la que Streamlit (y el chat) llaman a la API. Nunca a PostgreSQL.
-    api_base_url: str = "http://api:8000"
+    # URL de la API. El frontend tiene su propia configuracion; esta la usara
+    # el chat de la fase 6, que si vive en el backend.
+    api_base_url: str = "http://backend:8000"
 
     # --- Ollama (opcional, fase final) ---
     ollama_base_url: str = "http://ollama:11434"

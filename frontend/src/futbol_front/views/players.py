@@ -5,9 +5,9 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from futbol_analytics.app import charts, presentation
-from futbol_analytics.app.client import ApiError
-from futbol_analytics.app.state import (
+from futbol_front import charts, presentation
+from futbol_front.client import ApiError
+from futbol_front.state import (
     cached_catalog,
     cached_profile,
     cached_search,

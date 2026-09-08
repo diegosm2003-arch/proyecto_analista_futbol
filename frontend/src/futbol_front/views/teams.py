@@ -5,9 +5,9 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from futbol_analytics.app import charts, presentation
-from futbol_analytics.app.client import ApiError
-from futbol_analytics.app.state import cached_catalog, cached_styles
+from futbol_front import charts, presentation
+from futbol_front.client import ApiError
+from futbol_front.state import cached_catalog, cached_styles
 
 # Por debajo de este valor la particion es debil. No invalida el analisis: los
 # estilos de juego forman un continuo y no grupos separados.

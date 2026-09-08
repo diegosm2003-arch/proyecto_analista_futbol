@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "futbol-analytics-frontend"
+version = "0.1.0"
+description = "Interfaz Streamlit de la plataforma de analitica de futbol"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+# La interfaz solo habla HTTP con la API: no depende del paquete del backend ni
+# de PostgreSQL. mplsoccer es el estandar para pizza charts estilo FBref.
+dependencies = [
+    "streamlit>=1.37",
+    "requests>=2.32",
+    "pandas>=2.2",
+    "matplotlib>=3.9",
+    "mplsoccer>=1.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/futbol_front"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # simplificaciones
+    "T20", # prohibe print(): las trazas van por logging
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Streamlit y los tests si pueden escribir a stdout.
+"src/futbol_front/*" = ["T20"]
+"src/futbol_front/views/*" = ["T20"]
+"tests/*" = ["T20"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

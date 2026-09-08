@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from futbol_analytics.app.client import ApiError
-from futbol_analytics.app.state import get_client
-from futbol_analytics.app.views import players, teams
+from futbol_front.client import ApiError
+from futbol_front.state import get_client
+from futbol_front.views import players, teams
 
 st.set_page_config(
     page_title="Futbol Analytics",

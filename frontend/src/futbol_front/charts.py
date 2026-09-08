@@ -11,8 +11,13 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from mplsoccer import PyPizza
 
-from futbol_analytics.app.presentation import PizzaData, StyleMapData
-from futbol_analytics.templates import ATTACK, DEFENCE, POSSESSION
+from futbol_front.presentation import PizzaData, StyleMapData
+
+# Categorias tal y como las sirve la API en /meta/templates. Se repiten aqui en
+# lugar de importarlas del backend: la taxonomia es suya, la paleta es de la
+# interfaz. Si el backend anadiera una categoria nueva, sus porciones saldrian
+# en gris en lugar de romper el grafico.
+ATTACK, POSSESSION, DEFENCE = "Ataque", "Posesion", "Defensa"
 
 # Un color por categoria. Se distinguen bien en pantalla y tambien impresos en
 # gris, que importa si el grafico acaba en un post o en una presentacion.

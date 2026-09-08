@@ -12,8 +12,22 @@ concurrency:
 
 jobs:
   quality:
-    name: Lint y tests
+    name: Lint y tests (${{ matrix.project }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # El backend no instala el extra "etl": soccerdata arrastra el
+          # scraping y los tests no tocan la red. Que su imagen construye se
+          # comprueba en el job "docker".
+          - project: backend
+            extras: "[analysis,api,dev]"
+          - project: frontend
+            extras: "[dev]"
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,12 +35,10 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: ${{ matrix.project }}/pyproject.toml
 
-      # No se instala el extra "etl": soccerdata arrastra el scraping y los
-      # tests no tocan la red. Que su imagen construye se comprueba en el job
-      # "docker".
       - name: Instalar dependencias
-        run: python -m pip install -e ".[analysis,api,app,dev]"
+        run: python -m pip install -e ".${{ matrix.extras }}"
 
       - name: Ruff (lint)
         run: python -m ruff check --output-format=github .
@@ -35,7 +47,24 @@ jobs:
         run: python -m ruff format --check .
 
       - name: Tests
-        run: python -m pytest --cov=futbol_analytics --cov-report=term-missing
+        run: python -m pytest --cov --cov-report=term-missing
+
+  frontera:
+    name: El frontend no importa el backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # La regla de arquitectura que sostiene el proyecto: la interfaz solo
+      # habla HTTP con la API. Un import accidental la romperia en silencio y
+      # solo se notaria al construir la imagen, que no instala el backend.
+      - name: Buscar imports del backend en el frontend
+        run: |
+          if grep -rn "futbol_analytics" frontend/; then
+            echo "::error::El frontend importa el backend. Debe consumir la API por HTTP."
+            exit 1
+          fi
+          echo "Frontera respetada."
 
   docker:
     name: Construccion de imagenes
@@ -43,7 +72,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [etl, api, app]
+        project: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
 
@@ -51,12 +80,11 @@ jobs:
 
       # Solo se construyen: no se ejecutan ni se publican. Sirve para detectar
       # un Dockerfile roto desde el equipo de trabajo, donde no hay Docker.
-      - name: Construir imagen ${{ matrix.target }}
+      - name: Construir imagen ${{ matrix.project }}
         uses: docker/build-push-action@v6
         with:
-          context: .
-          target: ${{ matrix.target }}
+          context: ./${{ matrix.project }}
           push: false
           load: false
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+          cache-from: type=gha,scope=${{ matrix.project }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.project }}

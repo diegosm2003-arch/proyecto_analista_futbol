@@ -27,32 +27,54 @@ que cada analisis diga algo defendible sobre el juego.
 ## Arquitectura
 
 ```
-FBref / Understat  ->  ETL  ->  PostgreSQL  ->  FastAPI  ->  Streamlit
-                                                  ^             |
-                                                  +--- Ollama <-+
+                     backend/                          frontend/
+FBref  ->  ETL  ->  PostgreSQL  ->  FastAPI  --HTTP-->  Streamlit
+                                       ^                    |
+                                       +----- Ollama <------+
 ```
 
-Cinco servicios en Docker. Reglas de frontera:
+**Tres imagenes**: PostgreSQL (oficial), `backend` y `frontend`. El ETL reutiliza
+la imagen del backend cambiando el entrypoint, porque comparte con la API el
+catalogo, el esquema y la logica de analisis.
 
-- **FastAPI es la unica via de acceso a los datos.** Streamlit no lee PostgreSQL.
+Reglas de frontera:
+
+- **FastAPI es la unica via de acceso a los datos.** El frontend no lee
+  PostgreSQL y ni siquiera instala el paquete del backend: solo habla HTTP. La
+  CI falla si aparece un import que cruce esa linea.
 - **El ETL es un job**, no un servicio permanente: vive en un profile de Compose.
 - **Ollama solo llama a endpoints concretos** de la API, con tool calling acotado.
 
 ## Estructura
 
+Dos proyectos Python independientes, cada uno con su `pyproject.toml`, su
+`Dockerfile` y sus tests.
+
 ```
-src/futbol_analytics/
-  config.py           Ajustes via variables de entorno
-  logging_config.py   Logging estructurado en JSON
-  metrics.py          Catalogo de metricas: que se guarda y por que
-  positions.py        Normalizacion de posiciones
-  db/                 Esquema de PostgreSQL y motor de conexion
-  etl/                Extraccion (soccerdata), limpieza y carga
-  analysis/           Percentiles y clustering (logica pura, sin BD)
-  api/                FastAPI: routers, esquemas, repositorio y cache
-  app/                Streamlit: cliente de la API, graficos y vistas
-  templates.py        Ejes del pizza chart por posicion
-tests/                pytest, sin dependencia de la base de datos
+backend/          ETL, analisis y API. Lo unico que toca PostgreSQL.
+  src/futbol_analytics/
+    config.py           Ajustes via variables de entorno
+    logging_config.py   Logging estructurado en JSON
+    metrics.py          Catalogo de metricas: que se guarda y por que
+    positions.py        Normalizacion de posiciones
+    templates.py        Ejes del pizza chart por posicion
+    db/                 Esquema de PostgreSQL y motor de conexion
+    etl/                Extraccion (soccerdata), limpieza y carga
+    analysis/           Percentiles y clustering (logica pura, sin BD)
+    api/                FastAPI: routers, esquemas, repositorio y cache
+  tests/                176 tests, sin dependencia de la base de datos
+
+frontend/         Interfaz Streamlit. Solo habla HTTP con la API.
+  src/futbol_front/
+    config.py       Donde esta la API
+    client.py       Cliente HTTP, sin Streamlit para poder testearlo
+    presentation.py Preparacion de datos, sin matplotlib
+    charts.py       Pizza chart (mplsoccer) y mapa de estilos
+    state.py        Cliente compartido y cacheo
+    views/          Una vista por area del dominio
+  tests/                24 tests
+
+docker-compose.yml
 ```
 
 ## Modelo de datos
@@ -285,7 +307,7 @@ Requiere Docker. Solo se ejecuta en el equipo personal.
 
 ```bash
 cp .env.example .env        # y ajustar POSTGRES_PASSWORD
-docker compose up -d --build            # postgres + api + app
+docker compose up -d --build                # postgres + backend + frontend
 docker compose --profile etl run --rm etl   # ejecuta el ETL y termina
 docker compose --profile chat up -d ollama  # opcional, fase final
 ```
@@ -299,13 +321,18 @@ no obliga a reconstruir la imagen.
 ## Desarrollo sin Docker
 
 ```bash
-python -m pip install -e ".[analysis,api,dev]"
-python -m pytest
-python -m ruff check .
+# Backend
+cd backend && python -m pip install -e ".[analysis,api,dev]" && python -m pytest
+
+# Frontend
+cd frontend && python -m pip install -e ".[dev]" && python -m pytest
 ```
 
-Los tests cubren logica pura (percentiles, roles, estilo, limpieza del ETL y
-configuracion) con DataFrames de ejemplo, sin base de datos.
+200 tests en total. Ninguno necesita PostgreSQL: la logica de analisis es pura
+sobre DataFrames y la API sustituye el acceso a datos por objetos en memoria.
+
+Para trabajar sobre el ETL hace falta el extra `etl` del backend, que arrastra
+`soccerdata`.
 
 ## Estado
 

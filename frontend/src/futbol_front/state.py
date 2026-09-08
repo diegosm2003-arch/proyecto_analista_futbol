@@ -12,8 +12,8 @@ from typing import Any
 
 import streamlit as st
 
-from futbol_analytics.app.client import ApiClient
-from futbol_analytics.config import get_settings
+from futbol_front.client import ApiClient
+from futbol_front.config import api_base_url, request_timeout
 
 # Tiempo de vida de las respuestas cacheadas. Corto a proposito: la API ya
 # invalida su propio calculo con la version de los datos, asi que este TTL solo
@@ -24,7 +24,7 @@ TTL_SECONDS = 300
 @st.cache_resource
 def get_client() -> ApiClient:
     """Cliente unico por proceso."""
-    return ApiClient(get_settings().api_base_url)
+    return ApiClient(api_base_url(), timeout=request_timeout())
 
 
 @st.cache_data(ttl=TTL_SECONDS)

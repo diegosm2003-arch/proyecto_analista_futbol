@@ -1,11 +1,13 @@
 # Orquestacion de la plataforma.
 #
-#   docker compose up -d                -> postgres + api + app
-#   docker compose --profile etl run --rm etl   -> ejecuta el ETL y termina
-#   docker compose --profile chat up -d ollama  -> levanta Ollama (fase final)
+#   docker compose up -d --build                  -> postgres + backend + frontend
+#   docker compose --profile etl run --rm etl     -> ejecuta el ETL y termina
+#   docker compose --profile chat up -d ollama    -> Ollama (fase 6, opcional)
 #
-# El ETL vive en un profile porque es un job por lotes, no un servicio que deba
-# estar siempre en marcha. Ollama tambien, porque es opcional.
+# Tres imagenes: PostgreSQL (oficial), backend y frontend. El servicio `etl`
+# reutiliza la imagen del backend cambiando el entrypoint, porque comparte con
+# la API el catalogo, el esquema y la logica de analisis. Vive en un profile
+# porque es un job por lotes y no debe arrancar con `up`.
 
 name: futbol-analytics
 
@@ -29,12 +31,14 @@ services:
       timeout: 5s
       retries: 10
 
-  etl:
+  backend:
     build:
-      context: .
-      target: etl
-    container_name: futbol-etl
-    profiles: ["etl"]
+      context: ./backend
+    # Nombre fijo para que el servicio `etl` reutilice esta misma imagen en
+    # lugar de construirla dos veces.
+    image: futbol-analytics-backend:latest
+    container_name: futbol-backend
+    restart: unless-stopped
     env_file:
       # No falla si aun no existe .env: los valores por defecto de config.py bastan.
       - path: .env
@@ -43,34 +47,10 @@ services:
       # Dentro de la red de Docker la base de datos se llama "postgres".
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      # Cache de soccerdata sobre el volumen ./data, para no re-scrapear FBref.
-      SOCCERDATA_DIR: /app/data/soccerdata
-    volumes:
-      - ./src:/app/src
-      # Cache de scraping y ficheros intermedios, fuera de Git.
-      - ./data:/app/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
-
-  api:
-    build:
-      context: .
-      target: api
-    container_name: futbol-api
-    restart: unless-stopped
-    env_file:
-      # No falla si aun no existe .env: los valores por defecto de config.py bastan.
-      - path: .env
-        required: false
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
     ports:
       - "${API_HOST_PORT:-8000}:8000"
     volumes:
-      - ./src:/app/src
+      - ./backend/src:/app/src
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,26 +63,50 @@ services:
       - --reload
       - --reload-dir=/app/src
 
-  app:
+  frontend:
     build:
-      context: .
-      target: app
-    container_name: futbol-app
+      context: ./frontend
+    image: futbol-analytics-frontend:latest
+    container_name: futbol-frontend
     restart: unless-stopped
-    env_file:
-      # No falla si aun no existe .env: los valores por defecto de config.py bastan.
-      - path: .env
-        required: false
     environment:
-      # Streamlit habla SIEMPRE con la API, nunca con PostgreSQL.
-      API_BASE_URL: http://api:8000
+      # La interfaz habla SIEMPRE con la API, nunca con PostgreSQL.
+      API_BASE_URL: http://backend:8000
     ports:
       - "${APP_HOST_PORT:-8501}:8501"
     volumes:
-      - ./src:/app/src
+      - ./frontend/src:/app/src
     depends_on:
-      api:
+      backend:
         condition: service_healthy
+
+  etl:
+    # Misma imagen que el backend: solo cambia como se arranca.
+    image: futbol-analytics-backend:latest
+    build:
+      context: ./backend
+    container_name: futbol-etl
+    profiles: ["etl"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      # Cache de soccerdata sobre el volumen ./data, para no re-scrapear FBref.
+      SOCCERDATA_DIR: /app/data/soccerdata
+    volumes:
+      - ./backend/src:/app/src
+      # Cache de scraping y ficheros intermedios, fuera de Git.
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    # Con entrypoint, `docker compose run --rm etl --seasons 2627` anade
+    # argumentos a la CLI del ETL en lugar de reemplazar el comando entero.
+    entrypoint: ["python", "-m", "futbol_analytics.etl"]
+    command: []
 
   ollama:
     image: ollama/ollama:latest

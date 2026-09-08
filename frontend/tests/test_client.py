@@ -7,8 +7,8 @@ from typing import Any
 import pytest
 import requests
 
-from futbol_analytics.app import client as modulo
-from futbol_analytics.app.client import ApiClient, ApiError
+from futbol_front import client as modulo
+from futbol_front.client import ApiClient, ApiError
 
 
 class RespuestaFalsa:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from futbol_analytics.app.presentation import (
+from futbol_front.presentation import (
     prepare_pizza,
     prepare_style_map,
     summarise_profile,
