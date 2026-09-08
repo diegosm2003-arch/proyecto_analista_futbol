@@ -1,0 +1,53 @@
+"""Tests de los codigos de temporada."""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+
+from futbol_analytics.seasons import current_season, previous_season, season_code
+
+
+@pytest.mark.parametrize(
+    ("dia", "esperado"),
+    [
+        # Septiembre: la temporada 2026/27 ya ha empezado.
+        (date(2026, 9, 8), "2627"),
+        # Marzo: seguimos en la temporada que empezo el ano anterior.
+        (date(2026, 3, 1), "2526"),
+        # Julio cuenta ya como temporada nueva: hay pretemporada y fichajes, y
+        # ninguna competicion de la anterior sigue viva.
+        (date(2026, 7, 1), "2627"),
+        (date(2026, 6, 30), "2526"),
+        # Cambio de siglo, por si el formato de dos digitos se rompe.
+        (date(1999, 9, 1), "9900"),
+        (date(2000, 1, 15), "9900"),
+    ],
+)
+def test_season_code(dia: date, esperado: str) -> None:
+    assert season_code(dia) == esperado
+
+
+def test_current_season_usa_la_fecha_de_hoy_por_defecto() -> None:
+    codigo = current_season()
+
+    assert len(codigo) == 4
+    assert codigo.isdigit()
+
+
+def test_current_season_acepta_una_fecha() -> None:
+    assert current_season(date(2026, 9, 8)) == "2627"
+
+
+@pytest.mark.parametrize(
+    ("temporada", "esperado"),
+    [("2627", "2526"), ("2526", "2425"), ("0001", "9900")],
+)
+def test_previous_season(temporada: str, esperado: str) -> None:
+    assert previous_season(temporada) == esperado
+
+
+def test_previous_season_rechaza_un_codigo_invalido() -> None:
+    with pytest.raises(ValueError, match="invalido"):
+        previous_season("2026-27")

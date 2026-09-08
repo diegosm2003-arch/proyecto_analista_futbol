@@ -14,6 +14,8 @@ from urllib.parse import quote_plus
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from futbol_analytics.seasons import current_season
+
 # Identificadores de liga tal y como los espera `soccerdata`.
 BIG_5_LEAGUES = [
     "ESP-La Liga",
@@ -62,13 +64,20 @@ class Settings(BaseSettings):
     # validador de abajo, y `LEAGUES=ESP-La Liga,...` revienta el arranque.
     leagues: Annotated[list[str], NoDecode] = Field(default_factory=lambda: list(BIG_5_LEAGUES))
     # Temporadas en formato corto de soccerdata: "2425" = 2024/25.
-    seasons: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["2425", "2526"])
+    # Por defecto, la temporada en curso. Se calcula en cada arranque en lugar
+    # de fijarse a mano para que el proyecto no envejezca solo.
+    seasons: Annotated[list[str], NoDecode] = Field(default_factory=lambda: [current_season()])
     # Directorio de cache del scraping (soccerdata). Fuera de Git, en el
     # volumen de datos: sin cache, cada ejecucion vuelve a descargar FBref.
     soccerdata_dir: str = "/app/data/soccerdata"
     # Minutos minimos para que un jugador entre en la poblacion de percentiles.
     # Por debajo de este umbral las metricas por 90 son ruido, no senal.
     min_minutes: int = 450
+    # Con la temporada empezada, 450 minutos dejarian fuera a casi todos: en la
+    # jornada 4 nadie ha jugado tanto. El umbral efectivo baja a esta fraccion
+    # de los minutos del jugador que mas ha jugado, que es una medida de cuanta
+    # temporada va disputada. Con la temporada terminada no cambia nada.
+    min_minutes_ratio: float = 0.3
 
     # --- Observabilidad ---
     log_level: str = "INFO"

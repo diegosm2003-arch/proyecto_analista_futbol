@@ -308,3 +308,64 @@ def test_una_carga_nueva_del_etl_invalida_lo_cacheado(
 
     # La version de los datos forma parte de la clave: no se reutiliza.
     assert cache.size() == entradas + 1
+
+
+# --- Contexto de la poblacion -----------------------------------------------
+
+
+def test_el_perfil_dice_cuantas_ligas_sostienen_el_percentil(client: TestClient) -> None:
+    cuerpo = client.get("/players/DF 0/profile", params={"season": TEMPORADA}).json()
+
+    assert cuerpo["population_leagues"] == 5
+    assert cuerpo["min_minutes_applied"] == 450
+
+
+def test_con_una_sola_liga_cargada_el_perfil_avisa(
+    equipos: pd.DataFrame,
+    jugadores: pd.DataFrame,
+) -> None:
+    # Cargar solo LaLiga es legitimo para probar, pero rompe la premisa del
+    # producto: el percentil se calcula contra las Big 5.
+    from futbol_analytics.api import cache
+    from futbol_analytics.api.dependencies import get_data_access
+    from futbol_analytics.api.main import app
+    from tests.conftest import FakeDataAccess
+
+    solo_laliga = jugadores[jugadores["league"] == "ESP-La Liga"]
+    cache.clear()
+    app.dependency_overrides[get_data_access] = lambda: FakeDataAccess(solo_laliga, equipos)
+    try:
+        with TestClient(app) as cliente:
+            cuerpo = cliente.get("/players/DF 0/profile", params={"season": TEMPORADA}).json()
+    finally:
+        app.dependency_overrides.clear()
+        cache.clear()
+
+    assert cuerpo["population_leagues"] == 1
+    assert any("grandes ligas" in aviso for aviso in cuerpo["caveats"])
+
+
+def test_con_la_temporada_empezada_el_perfil_avisa(
+    equipos: pd.DataFrame,
+    jugadores: pd.DataFrame,
+) -> None:
+    # En la jornada 4 el umbral baja para que la plataforma no salga vacia, pero
+    # eso no hace fiables los ratios por 90 y hay que decirlo.
+    from futbol_analytics.api import cache
+    from futbol_analytics.api.dependencies import get_data_access
+    from futbol_analytics.api.main import app
+    from tests.conftest import FakeDataAccess
+
+    empezada = jugadores.copy()
+    empezada["minutes"] = 360
+    cache.clear()
+    app.dependency_overrides[get_data_access] = lambda: FakeDataAccess(empezada, equipos)
+    try:
+        with TestClient(app) as cliente:
+            cuerpo = cliente.get("/players/DF 0/profile", params={"season": TEMPORADA}).json()
+    finally:
+        app.dependency_overrides.clear()
+        cache.clear()
+
+    assert cuerpo["min_minutes_applied"] == 108
+    assert any("Temporada empezada" in aviso for aviso in cuerpo["caveats"])

@@ -110,6 +110,12 @@ class PlayerProfile(BaseModel):
     population_size: int = Field(
         description="Jugadores en la poblacion. Por debajo de ~50 el percentil es fragil"
     )
+    population_leagues: int = Field(
+        description="Ligas cargadas en la poblacion. El diseno asume las 5 grandes"
+    )
+    min_minutes_applied: int = Field(
+        description="Umbral de minutos usado. Baja solo si la temporada esta empezada"
+    )
     caveats: list[str] = Field(
         default_factory=list,
         description="Advertencias de lectura del perfil",

@@ -157,3 +157,33 @@ def eligible(players: pd.DataFrame, min_minutes: int) -> pd.DataFrame:
             extra={"jugadores": descartados, "min_minutes": min_minutes},
         )
     return players[valido].copy()
+
+
+def effective_min_minutes(
+    players: pd.DataFrame,
+    configured: int,
+    ratio: float,
+) -> int:
+    """Umbral de minutos ajustado a cuanta temporada se ha jugado.
+
+    El problema que resuelve: en la jornada 4 nadie llega a 450 minutos, asi que
+    un umbral fijo dejaria la plataforma vacia durante los dos primeros meses de
+    cada temporada.
+
+    Se toma como referencia al jugador que mas ha jugado, que es la mejor medida
+    disponible de cuanta competicion va disputada, y se exige una fraccion de
+    eso. Con la temporada terminada el calculo no cambia nada: `ratio * 3400` es
+    muy superior a 450, y se conserva el umbral configurado.
+
+    No arregla el problema de fondo, solo lo hace manejable: **un percentil de
+    la jornada 4 es ruidoso se mire como se mire**, y por eso la API avisa
+    cuando el umbral efectivo ha bajado.
+    """
+    if players.empty or "minutes" not in players.columns:
+        return configured
+
+    maximo = pd.to_numeric(players["minutes"], errors="coerce").max()
+    if pd.isna(maximo) or maximo <= 0:
+        return configured
+
+    return max(1, int(min(configured, ratio * float(maximo))))

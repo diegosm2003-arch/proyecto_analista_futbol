@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from futbol_analytics.config import get_settings
+from futbol_analytics.config import BIG_5_LEAGUES, get_settings
 from futbol_analytics.db import create_schema, get_engine, player_season, team_season
 from futbol_analytics.etl import extract, load, transform
 from futbol_analytics.metrics import PLAYER_METRICS, TEAM_METRICS, stat_types
@@ -49,6 +49,7 @@ def run(
     seasons = seasons or settings.seasons
 
     logger.info("ETL iniciado", extra={"ligas": leagues, "temporadas": seasons, "dry_run": dry_run})
+    _avisar_si_falta_poblacion(leagues)
 
     if dry_run:
         players = _prepare_players(leagues, seasons) if load_players else None
@@ -84,6 +85,22 @@ def run(
         )
         logger.info("ETL terminado", extra={"jugadores": player_rows, "equipos": team_rows})
         return RunResult(player_rows=player_rows, team_rows=team_rows)
+
+
+def _avisar_si_falta_poblacion(leagues: list[str]) -> None:
+    """Avisa si la carga no cubre las cinco grandes ligas.
+
+    Cargar solo LaLiga es legitimo para probar el ETL, pero rompe la premisa del
+    producto: los percentiles se calculan contra las Big 5 porque con una sola
+    liga la muestra por posicion se queda corta. Es un aviso, no un error: quien
+    carga una liga suele saber lo que hace.
+    """
+    faltan = [liga for liga in BIG_5_LEAGUES if liga not in leagues]
+    if faltan:
+        logger.warning(
+            "La carga no cubre las Big 5: los percentiles seran menos solidos",
+            extra={"ligas_ausentes": faltan},
+        )
 
 
 def _prepare_players(leagues: list[str], seasons: list[str]) -> pd.DataFrame:

@@ -1,0 +1,47 @@
+"""Codigos de temporada.
+
+`soccerdata` identifica las temporadas con cuatro digitos: "2627" es 2026/27.
+Las ligas europeas arrancan en agosto y terminan en mayo, asi que el ano natural
+no sirve para saber en que temporada estamos.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+
+# Mes a partir del cual una fecha pertenece ya a la temporada que empieza. Julio
+# y no agosto: en julio ya hay pretemporada y fichajes, y ninguna competicion de
+# la temporada anterior sigue viva.
+SEASON_START_MONTH = 7
+
+
+def season_code(day: date) -> str:
+    """Codigo de la temporada a la que pertenece una fecha.
+
+    >>> season_code(date(2026, 9, 8))
+    '2627'
+    >>> season_code(date(2026, 3, 1))
+    '2526'
+    """
+    inicio = day.year if day.month >= SEASON_START_MONTH else day.year - 1
+    return f"{inicio % 100:02d}{(inicio + 1) % 100:02d}"
+
+
+def current_season(today: date | None = None) -> str:
+    """Temporada en curso."""
+    return season_code(today or date.today())
+
+
+def previous_season(season: str) -> str:
+    """Temporada anterior a una dada.
+
+    Util para comparar a un jugador con su propio rendimiento del ano pasado.
+
+    >>> previous_season("2627")
+    '2526'
+    """
+    if len(season) != 4 or not season.isdigit():
+        raise ValueError(f"Codigo de temporada invalido: {season!r}. Se espera algo como '2627'.")
+    inicio = int(season[:2])
+    anterior = (inicio - 1) % 100
+    return f"{anterior:02d}{inicio:02d}"

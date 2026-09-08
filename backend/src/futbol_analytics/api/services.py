@@ -87,7 +87,10 @@ def _build_players(data: DataAccess, season: str) -> pd.DataFrame:
     # las proporciones de un jugador con 100 minutos son inestables y
     # deformarian los centroides de los roles.
     ajustes = get_settings()
-    elegibles = features.eligible(jugadores, ajustes.min_minutes)
+    umbral = features.effective_min_minutes(
+        jugadores, ajustes.min_minutes, ajustes.min_minutes_ratio
+    )
+    elegibles = features.eligible(jugadores, umbral)
     con_rol = roles.assign_all_roles(elegibles)
 
     # Los que no llegan al umbral se conservan sin rol: existen, aunque no se
@@ -113,17 +116,19 @@ def _build_percentiles(data: DataAccess, season: str, population: str) -> pd.Dat
             logger.warning("No se ha podido calcular la posesion de los equipos")
 
     ajustes = get_settings()
+    umbral = features.effective_min_minutes(
+        jugadores, ajustes.min_minutes, ajustes.min_minutes_ratio
+    )
     resultado = percentiles.compute(
         jugadores,
         PLAYER_METRICS,
-        min_minutes=ajustes.min_minutes,
+        min_minutes=umbral,
         possession=posesion,
         population_keys=_POPULATION_KEYS[population],
     )
     if resultado.empty:
         raise NoDataError(
-            f"Ningun jugador de la temporada {season!r} supera los "
-            f"{ajustes.min_minutes} minutos minimos."
+            f"Ningun jugador de la temporada {season!r} supera los {umbral} minutos minimos."
         )
     return resultado
 
@@ -136,6 +141,25 @@ def _build_styles(data: DataAccess, season: str, n_styles: int) -> style.StyleRe
         return style.cluster_styles(equipos, n_styles=n_styles)
     except ValueError as error:
         raise NoDataError(str(error)) from error
+
+
+def population_context(data: DataAccess, season: str) -> dict[str, int]:
+    """Cuanta poblacion sostiene los percentiles de una temporada.
+
+    Se devuelve al cliente porque cambia como hay que leer el numero: un
+    percentil calculado sobre una sola liga, o sobre una temporada de la que van
+    cuatro jornadas, no vale lo mismo que uno de una temporada cerrada de las
+    Big 5.
+    """
+    jugadores = enriched_players(data, season)
+    ajustes = get_settings()
+    return {
+        "leagues": int(jugadores["league"].nunique()),
+        "min_minutes": features.effective_min_minutes(
+            jugadores, ajustes.min_minutes, ajustes.min_minutes_ratio
+        ),
+        "configured_min_minutes": ajustes.min_minutes,
+    }
 
 
 def population_column(population: str) -> str:

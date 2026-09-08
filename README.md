@@ -20,7 +20,8 @@ que cada analisis diga algo defendible sobre el juego.
 - Comparaciones **siempre dentro de posiciones y roles comparables**.
 - Metricas **por 90 minutos**, salvo cuando lo relevante sea el volumen total.
 - Umbral de **minutos minimos** (`MIN_MINUTES`, por defecto 450) para que los
-  ratios por 90 no sean ruido.
+  ratios por 90 no sean ruido. Con la temporada empezada baja automaticamente:
+  en la jornada 4 nadie llega a 450 minutos y la plataforma saldria vacia.
 - Preferencia por metricas con significado futbolistico (xG, xA, pases
   progresivos, PPDA, presion) sobre metricas vacias como "pases totales".
 
@@ -117,11 +118,38 @@ que leerlo con esa reserva.
 
 ## Ejecutar el ETL
 
+### Primera carga
+
+Antes de nada, comprobar que el catalogo de metricas casa con lo que FBref
+publica hoy. FBref renombra columnas de vez en cuando y esto convierte ese fallo
+en un diff legible en lugar de una depuracion a ciegas:
+
 ```bash
-docker compose --profile etl run --rm etl                        # todo
-docker compose --profile etl run --rm etl --seasons 2526         # una temporada
-docker compose --profile etl run --rm etl --dry-run              # sin escribir
-docker compose --profile etl run --rm etl --inspect              # ver columnas
+docker compose --profile etl run --rm etl --inspect --leagues "ESP-La Liga"
+```
+
+Revisa `data/fbref_columns.json`, corrige `metrics.py` si hace falta, y carga:
+
+```bash
+# LaLiga de la temporada en curso, para ver algo funcionando cuanto antes
+docker compose --profile etl run --rm etl --leagues "ESP-La Liga"
+
+# La carga que el producto necesita de verdad: las Big 5
+docker compose --profile etl run --rm etl
+```
+
+> **Cargar solo LaLiga funciona, pero degrada los percentiles.** La poblacion de
+> referencia son las cinco grandes ligas: con una sola, un lateral se compara
+> contra unos 80 laterales en lugar de contra 400. El ETL avisa por log y la API
+> lo indica en los `caveats` de cada perfil. Sirve para probar la cadena de
+> extremo a extremo; no para sacar conclusiones.
+
+### Otros usos
+
+```bash
+docker compose --profile etl run --rm etl --seasons 2526   # una temporada concreta
+docker compose --profile etl run --rm etl --dry-run        # descarga sin escribir
+docker compose --profile etl run --rm etl --only teams     # solo equipos
 ```
 
 La carga es un `UPSERT` sobre la clave natural: relanzarla actualiza, nunca

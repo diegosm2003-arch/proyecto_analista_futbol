@@ -185,3 +185,46 @@ def test_eligible_descarta_muestras_pequenas_y_jugadores_sin_posicion() -> None:
     resultado = features.eligible(jugadores, min_minutes=450)
 
     assert resultado["player"].tolist() == ["Titular"]
+
+
+# --- Umbral de minutos en temporada empezada --------------------------------
+
+
+def _con_minutos(valores: list[float]) -> pd.DataFrame:
+    return pd.DataFrame({"minutes": valores, "position_group": ["MF"] * len(valores)})
+
+
+def test_con_la_temporada_terminada_el_umbral_no_cambia() -> None:
+    # Un jugador de 3.400 minutos: 0,3 de eso son 1.020, muy por encima de 450,
+    # asi que se conserva el umbral configurado.
+    jugadores = _con_minutos([3400.0, 2000.0, 500.0])
+
+    assert features.effective_min_minutes(jugadores, configured=450, ratio=0.3) == 450
+
+
+def test_con_la_temporada_empezada_el_umbral_baja() -> None:
+    # Jornada 4: el que mas ha jugado suma 360 minutos. Con el umbral fijo la
+    # plataforma saldria vacia durante los dos primeros meses de cada temporada.
+    jugadores = _con_minutos([360.0, 300.0, 90.0])
+
+    assert features.effective_min_minutes(jugadores, configured=450, ratio=0.3) == 108
+
+
+def test_el_umbral_nunca_baja_a_cero() -> None:
+    # Con una sola jornada disputada el umbral seria minusculo, pero admitir a
+    # jugadores con cero minutos daria ratios infinitos.
+    jugadores = _con_minutos([1.0])
+
+    assert features.effective_min_minutes(jugadores, configured=450, ratio=0.3) >= 1
+
+
+def test_sin_datos_se_conserva_el_umbral_configurado() -> None:
+    vacio = pd.DataFrame(columns=["minutes", "position_group"])
+
+    assert features.effective_min_minutes(vacio, configured=450, ratio=0.3) == 450
+
+
+def test_con_minutos_invalidos_se_conserva_el_umbral() -> None:
+    jugadores = _con_minutos([float("nan"), float("nan")])
+
+    assert features.effective_min_minutes(jugadores, configured=450, ratio=0.3) == 450

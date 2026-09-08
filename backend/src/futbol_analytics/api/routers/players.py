@@ -28,6 +28,9 @@ router = APIRouter(prefix="/players", tags=["jugadores"])
 # jugadores, cada posicion vale mas de tres puntos porcentuales.
 FRAGILE_POPULATION = 50
 
+# Las cinco grandes ligas europeas, que es la poblacion que el diseno asume.
+EXPECTED_LEAGUES = 5
+
 
 @router.get("", summary="Buscar jugadores")
 def search(
@@ -101,6 +104,7 @@ def profile(
         )
 
     ficha = _summary(perfil.iloc[0])
+    contexto = services.population_context(data, season)
     columna = services.population_column(population)
     grupo = perfil.iloc[0].get(columna)
     tamano = services.population_size(todos, season, columna, grupo)
@@ -111,7 +115,7 @@ def profile(
     seleccion = perfil[perfil["metric"].isin(relevantes)]
     metricas = _metrics(seleccion, basis)
 
-    avisos = _caveats(ficha, population, tamano)
+    avisos = _caveats(ficha, population, tamano, contexto)
     if basis == "padj" and all(metrica.percentile is None for metrica in metricas):
         # Pasa cuando no hay datos de equipo para su liga. El percentil ajustado
         # solo se calcula entre jugadores con posesion conocida, asi que si falta
@@ -127,6 +131,8 @@ def profile(
         population=population,
         population_group=None if pd.isna(grupo) else grupo,
         population_size=tamano,
+        population_leagues=contexto["leagues"],
+        min_minutes_applied=contexto["min_minutes"],
         caveats=avisos,
         metrics=metricas,
     )
@@ -175,13 +181,35 @@ def _metrics(perfil: pd.DataFrame, basis: Basis) -> list[MetricPercentile]:
     ]
 
 
-def _caveats(ficha: PlayerSummary, population: str, tamano: int) -> list[str]:
+def _caveats(
+    ficha: PlayerSummary,
+    population: str,
+    tamano: int,
+    contexto: dict[str, int],
+) -> list[str]:
     """Advertencias de lectura que acompanan al perfil.
 
     Se devuelven desde la API y no desde la interfaz para que las vea tambien
     quien consuma los endpoints directamente, incluido el chat.
     """
     avisos = []
+    if contexto["leagues"] < EXPECTED_LEAGUES:
+        # El percentil solo significa lo que promete si la poblacion son las
+        # Big 5. Con una liga cargada, un lateral se compara contra 80 laterales
+        # en lugar de contra 400.
+        avisos.append(
+            f"La poblacion solo incluye {contexto['leagues']} de las "
+            f"{EXPECTED_LEAGUES} grandes ligas: el percentil es menos solido de "
+            "lo que el diseno pretende. Carga las Big 5 de esta temporada."
+        )
+    if contexto["min_minutes"] < contexto["configured_min_minutes"]:
+        # Pasa en las primeras jornadas: el umbral baja para que la plataforma
+        # no salga vacia, pero eso no hace fiables los ratios por 90.
+        avisos.append(
+            f"Temporada empezada: el umbral ha bajado a {contexto['min_minutes']} minutos "
+            f"(configurado: {contexto['configured_min_minutes']}). Con tan pocos partidos, "
+            "las metricas por 90 son muy inestables."
+        )
     if tamano and tamano < FRAGILE_POPULATION:
         avisos.append(
             f"La poblacion de comparacion son solo {tamano} jugadores: el percentil es fragil."
