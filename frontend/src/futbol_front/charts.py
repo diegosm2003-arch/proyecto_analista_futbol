@@ -7,11 +7,13 @@ los conozca no tiene que aprender a leerlos.
 
 from __future__ import annotations
 
+import io
+
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from mplsoccer import PyPizza
 
-from futbol_front.presentation import PizzaData, StyleMapData
+from futbol_front.presentation import ComparisonData, PizzaData, StyleMapData
 
 # Categorias tal y como las sirve la API en /meta/templates. Se repiten aqui en
 # lugar de importarlas del backend: la taxonomia es suya, la paleta es de la
@@ -26,6 +28,12 @@ CATEGORY_COLORS = {
     POSSESSION: "#3C7DC4",
     DEFENCE: "#4F9D69",
 }
+
+# Colores de los dos jugadores en la comparacion. No se usan los de categoria
+# porque aqui lo que hay que distinguir es quien es quien, no en que fase del
+# juego aporta: la categoria ya la da la posicion de la porcion.
+COMPARE_A = "#1F4E79"
+COMPARE_B = "#E07B39"
 
 BACKGROUND = "#F5F5F0"
 TEXT = "#1B1B1B"
@@ -140,4 +148,95 @@ def style_map(data: StyleMapData, title: str) -> Figure:
     ejes.grid(color=GRID, linewidth=0.8, zorder=1)
     ejes.legend(loc="best", fontsize=8, frameon=True, facecolor=BACKGROUND)
     figura.tight_layout()
+    return figura
+
+
+def to_png(figura: Figure, dpi: int = 200) -> bytes:
+    """Convierte una figura en un PNG listo para descargar.
+
+    Se fija el color de fondo explicitamente porque `savefig` usa blanco por
+    defecto y perderia el fondo del grafico, dejando un marco blanco alrededor
+    del circulo. A 200 ppp la imagen aguanta bien en una publicacion sin pesar
+    de mas.
+    """
+    buffer = io.BytesIO()
+    figura.savefig(
+        buffer,
+        format="png",
+        dpi=dpi,
+        bbox_inches="tight",
+        facecolor=figura.get_facecolor(),
+    )
+    return buffer.getvalue()
+
+
+def compare(data: ComparisonData, name_a: str, name_b: str, subtitle: str) -> Figure:
+    """Dibuja a dos jugadores sobre los mismos ejes.
+
+    Es el formato que mas circula en football analytics porque responde de un
+    vistazo a la pregunta que de verdad se hace un analista: no "¿como es este
+    jugador?", sino "¿en que se diferencia de aquel?".
+    """
+    if not len(data):
+        raise ValueError("Los dos jugadores no comparten ninguna metrica con percentil.")
+
+    baker = PyPizza(
+        params=data.labels,
+        background_color=BACKGROUND,
+        straight_line_color=GRID,
+        straight_line_lw=1,
+        last_circle_color=GRID,
+        last_circle_lw=1.5,
+        other_circle_lw=0,
+        inner_circle_size=18,
+    )
+
+    figura, ejes = baker.make_pizza(
+        data.values_a,
+        compare_values=data.values_b,
+        figsize=(8.0, 8.6),
+        kwargs_slices={
+            "facecolor": COMPARE_A,
+            "edgecolor": BACKGROUND,
+            "zorder": 2,
+            "linewidth": 1,
+        },
+        kwargs_compare={
+            "facecolor": COMPARE_B,
+            "edgecolor": BACKGROUND,
+            "zorder": 2,
+            "linewidth": 1,
+        },
+        kwargs_params={"color": TEXT, "fontsize": 10, "va": "center"},
+        kwargs_values={
+            "color": "#FFFFFF",
+            "fontsize": 9,
+            "zorder": 3,
+            "bbox": {
+                "edgecolor": "#000000",
+                "facecolor": COMPARE_A,
+                "boxstyle": "round,pad=0.2",
+                "lw": 1,
+            },
+        },
+        kwargs_compare_values={
+            "color": "#FFFFFF",
+            "fontsize": 9,
+            "zorder": 3,
+            "bbox": {
+                "edgecolor": "#000000",
+                "facecolor": COMPARE_B,
+                "boxstyle": "round,pad=0.2",
+                "lw": 1,
+            },
+        },
+    )
+
+    figura.text(
+        0.515, 0.975, f"{name_a}  vs  {name_b}", size=15, ha="center", color=TEXT, weight="bold"
+    )
+    figura.text(0.515, 0.947, subtitle, size=10, ha="center", color="#5A5A5A")
+    figura.text(0.36, 0.022, name_a, size=11, ha="center", color=COMPARE_A, weight="bold")
+    figura.text(0.64, 0.022, name_b, size=11, ha="center", color=COMPARE_B, weight="bold")
+    ejes.set_facecolor(BACKGROUND)
     return figura

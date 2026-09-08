@@ -101,11 +101,6 @@ NO_TEMPLATE = ("GK",)
 
 def template_for(position_group: str | None) -> tuple[Slice, ...]:
     """Plantilla de una posicion. Vacia si no tiene grafico definido."""
-    if position_group is None:
+    if position_group is None or position_group in NO_TEMPLATE:
         return ()
     return PIZZA_TEMPLATES.get(position_group, ())
-
-
-def template_metrics(position_group: str | None) -> tuple[str, ...]:
-    """Nombres de las metricas de una plantilla, en orden."""
-    return tuple(porcion.metric for porcion in template_for(position_group))

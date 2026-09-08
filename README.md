@@ -1,5 +1,9 @@
 # Futbol Analytics
 
+[![CI](https://github.com/diegosm2003-arch/proyecto_analista_futbol/actions/workflows/ci.yml/badge.svg)](https://github.com/diegosm2003-arch/proyecto_analista_futbol/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Licencia](https://img.shields.io/badge/licencia-MIT-4F9D69)
+
 Plataforma personal de analitica de futbol sobre **LaLiga**, con las **Big 5 ligas
 europeas** como poblacion de referencia. El objetivo no es solo mover datos: es
 que cada analisis diga algo defendible sobre el juego.
@@ -348,6 +352,16 @@ Tres vistas en Streamlit, servidas siempre desde la API.
 conmutadores de normalizacion (por 90 / ajustado por posesion) y de poblacion
 (posicion / rol) estan a la vista: comparar las dos versiones del mismo jugador
 suele ser el hallazgo.
+
+Se pueden **superponer dos jugadores** sobre los mismos ejes, que es el formato
+que responde a la pregunta que de verdad se hace un analista: no "¿como es este
+jugador?" sino "¿en que se diferencia de aquel?". Solo se ofrecen jugadores de
+la misma posicion, porque los ejes dependen de ella, y una metrica que le falte
+a uno de los dos se cae del grafico: dejarla vacia se leeria como que ese
+jugador vale cero en ella.
+
+Todos los graficos se **descargan en PNG**, para poder publicarlos sin recurrir
+a una captura de pantalla.
 
 **Estilo de equipo.** Mapa de posesion frente a presion, coloreado por cluster.
 El eje vertical va invertido porque una PPDA baja significa presion alta, y

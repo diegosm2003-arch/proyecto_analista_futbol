@@ -32,8 +32,6 @@ PER90_PREFIX = "per_90_minutes"
 # "unnamed_3_level_0".
 _UNNAMED = re.compile(r"^unnamed(_\d+)?(_level(_\d+)?)?$")
 
-IDENTITY_COLUMNS = ("nation", "position_raw", "position_group", "age", "born")
-
 
 class MissingColumnsError(RuntimeError):
     """FBref no ha devuelto columnas que el catalogo da por obligatorias.

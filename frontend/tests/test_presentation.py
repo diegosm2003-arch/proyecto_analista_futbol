@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from futbol_front import presentation
 from futbol_front.presentation import (
     prepare_pizza,
     prepare_style_map,
@@ -176,3 +177,55 @@ def test_sin_metricas_con_direccion_se_dice_claramente() -> None:
     perfil = {"metrics": [{"label": "Despejes", "percentile": 99.0, "higher_is_better": None}]}
 
     assert "Sin metricas suficientes" in summarise_profile(perfil)
+
+
+# --- Nombre de fichero ------------------------------------------------------
+
+
+def test_el_nombre_de_fichero_sobrevive_a_acentos_y_espacios() -> None:
+    # Los nombres reales llevan acentos y puntos ("A. Garcia"), y eso da
+    # problemas al guardar segun donde acabe el fichero.
+    assert (
+        presentation.chart_filename("Nico Williams", "2627", "per90")
+        == "nico-williams-2627-per90.png"
+    )
+    assert presentation.chart_filename("Iñaki Peña") == "inaki-pena.png"
+    assert presentation.chart_filename("A. García", "2627") == "a-garcia-2627.png"
+
+
+def test_el_nombre_de_fichero_nunca_queda_vacio() -> None:
+    assert presentation.chart_filename("...", "  ") == "grafico.png"
+
+
+# --- Comparacion de dos jugadores -------------------------------------------
+
+
+def test_la_comparacion_usa_los_mismos_ejes_y_el_mismo_orden() -> None:
+    uno = _perfil(npxg=80.0, progressive_passes=60.0, tackles=40.0)
+    otro = _perfil(tackles=90.0, npxg=20.0, progressive_passes=50.0)
+
+    datos = presentation.prepare_comparison(uno, otro, PLANTILLA)
+
+    assert datos.labels == ["xG sin penaltis", "Pases progresivos", "Entradas"]
+    assert datos.values_a == [80, 60, 40]
+    assert datos.values_b == [20, 50, 90]
+
+
+def test_una_metrica_que_le_falta_a_uno_se_cae_de_la_comparacion() -> None:
+    # Pintar la porcion del que si la tiene y dejar vacia la del otro se leeria
+    # como que el segundo vale cero, que es falso y ademas es el error mas
+    # danino en un grafico hecho para compararlos de un vistazo.
+    uno = _perfil(npxg=80.0, progressive_passes=60.0, tackles=40.0)
+    otro = _perfil(npxg=20.0, tackles=90.0)
+
+    datos = presentation.prepare_comparison(uno, otro, PLANTILLA)
+
+    assert datos.labels == ["xG sin penaltis", "Entradas"]
+    assert "progressive_passes" in datos.missing
+    assert len(datos.values_a) == len(datos.values_b) == 2
+
+
+def test_sin_metricas_comunes_la_comparacion_queda_vacia() -> None:
+    datos = presentation.prepare_comparison(_perfil(npxg=80.0), _perfil(tackles=50.0), PLANTILLA)
+
+    assert len(datos) == 0

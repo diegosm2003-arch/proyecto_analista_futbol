@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from futbol_analytics.seasons import current_season, previous_season, season_code
+from futbol_analytics.seasons import current_season, season_code
 
 
 @pytest.mark.parametrize(
@@ -38,16 +38,3 @@ def test_current_season_usa_la_fecha_de_hoy_por_defecto() -> None:
 
 def test_current_season_acepta_una_fecha() -> None:
     assert current_season(date(2026, 9, 8)) == "2627"
-
-
-@pytest.mark.parametrize(
-    ("temporada", "esperado"),
-    [("2627", "2526"), ("2526", "2425"), ("0001", "9900")],
-)
-def test_previous_season(temporada: str, esperado: str) -> None:
-    assert previous_season(temporada) == esperado
-
-
-def test_previous_season_rechaza_un_codigo_invalido() -> None:
-    with pytest.raises(ValueError, match="invalido"):
-        previous_season("2026-27")

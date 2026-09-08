@@ -9,6 +9,8 @@ testear, y el dibujo queda como una capa fina encima.
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -64,6 +66,62 @@ def prepare_pizza(profile: dict[str, Any], template: list[dict[str, Any]]) -> Pi
         logger.info("Metricas sin percentil en el perfil", extra={"metricas": ausentes})
 
     return PizzaData(labels=etiquetas, values=valores, categories=categorias, missing=ausentes)
+
+
+@dataclass(frozen=True, slots=True)
+class ComparisonData:
+    """Dos jugadores sobre los mismos ejes."""
+
+    labels: list[str]
+    values_a: list[int]
+    values_b: list[int]
+    categories: list[str]
+    missing: list[str] = field(default_factory=list)
+
+    def __len__(self) -> int:
+        return len(self.labels)
+
+
+def prepare_comparison(
+    profile_a: dict[str, Any],
+    profile_b: dict[str, Any],
+    template: list[dict[str, Any]],
+) -> ComparisonData:
+    """Prepara la comparacion de dos jugadores sobre la misma plantilla.
+
+    Solo se conservan las metricas que **los dos** tienen: una porcion presente
+    para uno y vacia para el otro se leeria como que el segundo vale cero en
+    ella, que es una afirmacion falsa y ademas la mas danina posible en un
+    grafico pensado para compararlos de un vistazo.
+
+    Comparar solo tiene sentido si ambos percentiles salen de la misma
+    poblacion. Quien llama debe pedir los dos perfiles con la misma temporada y
+    la misma base de comparacion.
+    """
+    uno = prepare_pizza(profile_a, template)
+    dos = prepare_pizza(profile_b, template)
+
+    comunes = set(uno.labels) & set(dos.labels)
+    indices_a = {etiqueta: i for i, etiqueta in enumerate(uno.labels)}
+    indices_b = {etiqueta: i for i, etiqueta in enumerate(dos.labels)}
+
+    etiquetas, valores_a, valores_b, categorias = [], [], [], []
+    for i, etiqueta in enumerate(uno.labels):
+        if etiqueta not in comunes:
+            continue
+        etiquetas.append(etiqueta)
+        valores_a.append(uno.values[indices_a[etiqueta]])
+        valores_b.append(dos.values[indices_b[etiqueta]])
+        categorias.append(uno.categories[i])
+
+    ausentes = sorted(set(uno.missing) | set(dos.missing))
+    return ComparisonData(
+        labels=etiquetas,
+        values_a=valores_a,
+        values_b=valores_b,
+        categories=categorias,
+        missing=ausentes,
+    )
 
 
 def _percentil(valor: float, metrica: str) -> int:
@@ -131,3 +189,24 @@ def summarise_profile(profile: dict[str, Any]) -> str:
     mejores = sorted(con_direccion, key=lambda m: m["percentile"], reverse=True)[:2]
     partes = [f"{m['label'].lower()} (percentil {int(round(m['percentile']))})" for m in mejores]
     return "Destaca en " + " y en ".join(partes) + "."
+
+
+def chart_filename(*partes: str, extension: str = "png") -> str:
+    """Nombre de fichero para un grafico descargado.
+
+    Los nombres de jugador y equipo llevan acentos, espacios y algun punto
+    ("A. Garcia"), que dan problemas al guardar segun el sistema. Se pasan a
+    ASCII y se unen con guiones, que es lo que sobrevive a cualquier sitio donde
+    acabe el fichero: el escritorio, un adjunto o un gestor de contenidos.
+
+    >>> chart_filename("Nico Williams", "2627", "per90")
+    'nico-williams-2627-per90.png'
+    """
+    limpias = [_slug(parte) for parte in partes if _slug(parte)]
+    nombre = "-".join(limpias) or "grafico"
+    return f"{nombre}.{extension}"
+
+
+def _slug(texto: str) -> str:
+    sin_acentos = unicodedata.normalize("NFKD", str(texto)).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", sin_acentos.lower()).strip("-")

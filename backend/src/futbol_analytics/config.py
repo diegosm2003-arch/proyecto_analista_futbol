@@ -25,9 +25,6 @@ BIG_5_LEAGUES = [
     "FRA-Ligue 1",
 ]
 
-# Liga sobre la que se enfoca la vista final del producto.
-TARGET_LEAGUE = "ESP-La Liga"
-
 
 class Settings(BaseSettings):
     """Ajustes de la plataforma."""

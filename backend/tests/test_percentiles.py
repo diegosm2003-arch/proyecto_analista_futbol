@@ -8,7 +8,6 @@ es, que es la peor clase de fallo en un producto de analisis.
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from futbol_analytics.analysis import percentiles
 from futbol_analytics.metrics import PLAYER_METRICS
@@ -141,20 +140,3 @@ def test_una_poblacion_vacia_no_revienta() -> None:
 
     assert resultado.empty
     assert "percentile_per90" in resultado.columns
-
-
-def test_for_player_devuelve_el_perfil_ordenado() -> None:
-    jugadores = _poblacion([2.0, 4.0, 6.0, 8.0, 10.0], LIGAS)
-
-    resultado = percentiles.compute(jugadores, (GOLES, FALTAS), min_minutes=450)
-    perfil = percentiles.for_player(resultado, "Jugador 4", "2526")
-
-    assert set(perfil["metric"]) == {"goals", "fouls_committed"}
-    assert perfil["percentile_per90"].is_monotonic_decreasing
-
-
-def test_for_player_rechaza_una_base_desconocida() -> None:
-    resultado = percentiles.compute(_poblacion([2.0] * 5, LIGAS), (GOLES,), min_minutes=450)
-
-    with pytest.raises(ValueError, match="inventada"):
-        percentiles.for_player(resultado, "Jugador 0", "2526", basis="inventada")

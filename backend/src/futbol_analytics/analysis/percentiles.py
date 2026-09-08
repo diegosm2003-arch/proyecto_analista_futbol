@@ -92,28 +92,6 @@ def compute(
     return largo
 
 
-def for_player(
-    percentiles: pd.DataFrame,
-    player: str,
-    season: str,
-    *,
-    basis: str = BASIS_PER90,
-) -> pd.DataFrame:
-    """Extrae el perfil de un jugador, listo para dibujar un pizza chart.
-
-    Filtrar aqui y no antes de `compute` es lo que garantiza que el percentil se
-    haya calculado contra toda la poblacion.
-    """
-    columna = f"percentile_{basis}"
-    if columna not in percentiles.columns:
-        raise ValueError(f"Base de comparacion desconocida: {basis!r}")
-
-    perfil = percentiles[
-        (percentiles["player"] == player) & (percentiles["season"] == season)
-    ].copy()
-    return perfil.dropna(subset=[columna]).sort_values(columna, ascending=False)
-
-
 def _to_long(poblacion: pd.DataFrame, metrics: tuple[Metric, ...]) -> pd.DataFrame:
     """Pasa de una fila por jugador a una fila por jugador y metrica."""
     contexto = [columna for columna in CONTEXT_COLUMNS if columna in poblacion.columns]

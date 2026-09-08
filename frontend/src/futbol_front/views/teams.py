@@ -82,7 +82,15 @@ def _mapa(informe: dict, temporada: str) -> None:
         st.info("Ningun equipo tiene posesion y presion calculables.")
         return
 
-    st.pyplot(charts.style_map(datos, f"Estilos de juego - {temporada}"))
+    figura = charts.style_map(datos, f"Estilos de juego - {temporada}")
+    st.pyplot(figura)
+    st.download_button(
+        "Descargar mapa (PNG)",
+        data=charts.to_png(figura),
+        file_name=presentation.chart_filename("estilos", temporada),
+        mime="image/png",
+        icon=":material/download:",
+    )
     st.caption(
         "La PPDA es aproximada: se calcula sobre todo el campo porque FBref no "
         "publica el pase del rival por zonas. Ordena bien a los equipos, pero no "

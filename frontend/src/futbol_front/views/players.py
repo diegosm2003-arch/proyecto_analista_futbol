@@ -55,6 +55,7 @@ def render() -> None:
 
     seleccionado = _selector(jugadores)
     base, poblacion = _opciones_de_comparacion()
+    rival = _selector_de_comparacion(jugadores, seleccionado)
 
     try:
         perfil = cached_profile(
@@ -64,11 +65,29 @@ def render() -> None:
             basis=base,
             population=poblacion,
         )
+        # El segundo perfil se pide con la MISMA temporada, base y poblacion:
+        # comparar percentiles calculados sobre poblaciones distintas no
+        # significaria nada.
+        perfil_rival = (
+            cached_profile(
+                player=rival["player"],
+                season=rival["season"],
+                team=rival["team"],
+                basis=base,
+                population=poblacion,
+            )
+            if rival
+            else None
+        )
     except ApiError as error:
         st.error(str(error))
         return
 
-    _perfil(perfil, cliente_templates=cached_templates())
+    plantillas = cached_templates()
+    if perfil_rival:
+        _comparacion(perfil, perfil_rival, plantillas)
+    else:
+        _perfil(perfil, cliente_templates=plantillas)
 
 
 def _filtros(catalogo: dict) -> dict:
@@ -99,6 +118,63 @@ def _selector(jugadores: list[dict]) -> dict:
     etiquetas = {f"{j['player']} - {j['team']} ({j['minutes']} min)": j for j in jugadores}
     elegido = st.selectbox(f"Jugador ({len(jugadores)} encontrados)", list(etiquetas))
     return etiquetas[elegido]
+
+
+def _selector_de_comparacion(jugadores: list[dict], elegido: dict) -> dict | None:
+    """Segundo jugador, opcional.
+
+    Solo se ofrecen jugadores del mismo grupo de posicion: comparar a un central
+    con un delantero sobre los ejes de un central no dice nada de ninguno de los
+    dos.
+    """
+    comparables = [
+        j
+        for j in jugadores
+        if j["position_group"] == elegido["position_group"]
+        and (j["player"], j["team"]) != (elegido["player"], elegido["team"])
+    ]
+    if not comparables:
+        return None
+
+    etiquetas = {"Ninguno": None}
+    etiquetas.update({f"{j['player']} - {j['team']}": j for j in comparables})
+    seleccion = st.selectbox(
+        "Comparar con",
+        list(etiquetas),
+        help="Solo jugadores de la misma posicion: los ejes del grafico dependen de ella.",
+    )
+    return etiquetas[seleccion]
+
+
+def _comparacion(perfil: dict, rival: dict, templates: list[dict]) -> None:
+    """Pinta a los dos jugadores sobre los mismos ejes."""
+    ficha, ficha_rival = perfil["player"], rival["player"]
+    plantilla = _plantilla(templates, ficha["position_group"])
+    if not plantilla:
+        st.info("Esta posicion no tiene grafico definido.")
+        return
+
+    for aviso in perfil["caveats"]:
+        st.warning(aviso, icon=":material/info:")
+
+    datos = presentation.prepare_comparison(perfil, rival, plantilla)
+    if not len(datos):
+        st.info("Los dos jugadores no comparten metricas con percentil.")
+        return
+
+    figura = charts.compare(
+        datos,
+        f"{ficha['player']} ({ficha['team']})",
+        f"{ficha_rival['player']} ({ficha_rival['team']})",
+        _subtitulo(perfil),
+    )
+    st.pyplot(figura, use_container_width=False)
+    _descargar_figura(
+        figura,
+        presentation.chart_filename(ficha["player"], "vs", ficha_rival["player"], ficha["season"]),
+    )
+    if datos.missing:
+        st.caption("Sin datos para: " + ", ".join(datos.missing))
 
 
 def _opciones_de_comparacion() -> tuple[str, str]:
@@ -142,14 +218,37 @@ def _perfil(perfil: dict, cliente_templates: list[dict]) -> None:
         if len(datos):
             titulo = f"{ficha['player']} - {ficha['team']}"
             subtitulo = _subtitulo(perfil)
-            st.pyplot(charts.pizza(datos, titulo, subtitulo), use_container_width=False)
+            figura = charts.pizza(datos, titulo, subtitulo)
+            st.pyplot(figura, use_container_width=False)
             st.markdown(f"**{presentation.summarise_profile(perfil)}**")
+            _descargar(figura, ficha["player"], ficha["season"], perfil["basis"])
             if datos.missing:
                 st.caption("Sin datos para: " + ", ".join(datos.missing))
         else:
             st.info("El jugador no tiene percentiles calculables en esta base.")
 
     _tabla(perfil)
+
+
+def _descargar(figura, jugador: str, temporada: str, base: str) -> None:
+    """Boton para llevarse el grafico.
+
+    Sin esto, publicar un hallazgo obliga a hacer captura de pantalla. Es la
+    diferencia entre una herramienta de consulta y una de la que sale contenido,
+    que es uno de los propositos declarados del proyecto.
+    """
+    _descargar_figura(figura, presentation.chart_filename(jugador, temporada, base))
+
+
+def _descargar_figura(figura, nombre: str) -> None:
+    st.download_button(
+        "Descargar grafico (PNG)",
+        data=charts.to_png(figura),
+        file_name=nombre,
+        mime="image/png",
+        icon=":material/download:",
+        key=nombre,
+    )
 
 
 def _plantilla(templates: list[dict], position_group: str | None) -> list[dict]:

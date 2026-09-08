@@ -30,18 +30,3 @@ def season_code(day: date) -> str:
 def current_season(today: date | None = None) -> str:
     """Temporada en curso."""
     return season_code(today or date.today())
-
-
-def previous_season(season: str) -> str:
-    """Temporada anterior a una dada.
-
-    Util para comparar a un jugador con su propio rendimiento del ano pasado.
-
-    >>> previous_season("2627")
-    '2526'
-    """
-    if len(season) != 4 or not season.isdigit():
-        raise ValueError(f"Codigo de temporada invalido: {season!r}. Se espera algo como '2627'.")
-    inicio = int(season[:2])
-    anterior = (inicio - 1) % 100
-    return f"{anterior:02d}{inicio:02d}"

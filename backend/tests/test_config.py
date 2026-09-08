@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from futbol_analytics.config import BIG_5_LEAGUES, TARGET_LEAGUE, Settings
+from futbol_analytics.config import BIG_5_LEAGUES, Settings
 
 
 def test_valores_por_defecto_apuntan_a_las_big_5() -> None:
     settings = Settings(_env_file=None)
 
     assert settings.leagues == BIG_5_LEAGUES
-    assert TARGET_LEAGUE in settings.leagues
+    assert "ESP-La Liga" in settings.leagues
     # La poblacion de referencia debe ser mas amplia que la liga objetivo:
     # con una sola liga la muestra por posicion se queda corta.
     assert len(settings.leagues) == 5

@@ -14,7 +14,6 @@ from futbol_analytics.templates import (
     NO_TEMPLATE,
     PIZZA_TEMPLATES,
     template_for,
-    template_metrics,
 )
 
 NOMBRES = {metric.name: metric for metric in PLAYER_METRICS}
@@ -44,7 +43,7 @@ def test_las_metricas_se_pueden_normalizar_por_90(position_group: str) -> None:
 
 @pytest.mark.parametrize("position_group", sorted(PIZZA_TEMPLATES))
 def test_ninguna_metrica_se_repite_en_la_plantilla(position_group: str) -> None:
-    metricas = template_metrics(position_group)
+    metricas = [porcion.metric for porcion in template_for(position_group)]
 
     assert len(metricas) == len(set(metricas))
 
@@ -87,4 +86,4 @@ def test_los_porteros_no_tienen_plantilla() -> None:
 
 def test_una_posicion_desconocida_no_revienta() -> None:
     assert template_for(None) == ()
-    assert template_metrics("XX") == ()
+    assert template_for("XX") == ()
