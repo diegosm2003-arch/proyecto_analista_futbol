@@ -146,17 +146,31 @@ def inspect_columns(
     seasons = seasons or settings.seasons
     target = destination or Path(settings.soccerdata_dir).parent / "fbref_columns.json"
 
-    frames = extract.read_player_stats(stat_types(PLAYER_METRICS), leagues, seasons)
-    disponible = {
-        stat_type: sorted(transform.flatten_columns(frame).columns)
-        for stat_type, frame in frames.items()
-    }
+    # Cada tabla se pide por separado y se tolera que falle: el sentido de este
+    # modo es descubrir en que se diferencia la realidad de lo que el catalogo
+    # da por hecho, asi que morirse ante la primera diferencia lo vaciaria de
+    # utilidad. Una tabla que la fuente no ofrece se anota como no disponible.
+    disponible: dict[str, list[str]] = {}
+    no_disponibles: dict[str, str] = {}
+    for stat_type in stat_types(PLAYER_METRICS):
+        try:
+            frames = extract.read_player_stats((stat_type,), leagues, seasons)
+        except Exception as error:  # noqa: BLE001 - se registra y se sigue
+            no_disponibles[stat_type] = str(error)
+            logger.warning(
+                "Tabla no disponible en la fuente",
+                extra={"stat_type": stat_type, "motivo": str(error)},
+            )
+            continue
+        disponible[stat_type] = sorted(transform.flatten_columns(frames[stat_type]).columns)
     esperado = {metric.stat_type: [] for metric in PLAYER_METRICS}
     for metric in PLAYER_METRICS:
         esperado[metric.stat_type].append(metric.column)
 
     informe = {
         stat_type: {
+            "tabla_disponible": stat_type not in no_disponibles,
+            "motivo_si_no": no_disponibles.get(stat_type, ""),
             "disponibles": disponible.get(stat_type, []),
             "esperadas_por_el_catalogo": sorted(columns),
             "ausentes": sorted(set(columns) - set(disponible.get(stat_type, []))),
