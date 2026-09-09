@@ -62,7 +62,17 @@ def configure_logging(service: str, level: str | None = None) -> None:
 
     resolved_level = (level or get_settings().log_level).upper()
 
-    handler = logging.StreamHandler(sys.stdout)
+    # La salida se fuerza a UTF-8. En Windows la consola usa cp1252 y no sabe
+    # escribir acentos: un mensaje de error de PostgreSQL en espanol tumbaba el
+    # logger con UnicodeEncodeError, justo cuando se estaba registrando otro
+    # fallo. `errors="replace"` garantiza que ninguna traza se pierda por no
+    # poder representar un caracter.
+    salida = sys.stdout
+    reconfigurar = getattr(salida, "reconfigure", None)
+    if reconfigurar is not None:
+        reconfigurar(encoding="utf-8", errors="replace")
+
+    handler = logging.StreamHandler(salida)
     handler.setFormatter(JsonFormatter(service=service))
 
     root = logging.getLogger()

@@ -53,3 +53,16 @@ def test_configure_logging_deja_un_unico_handler_json(logging_intacto: None) -> 
     assert root.level == logging.WARNING
     assert len(root.handlers) == 1
     assert isinstance(root.handlers[0].formatter, JsonFormatter)
+
+
+def test_el_logger_no_muere_con_acentos(logging_intacto: None) -> None:
+    # En Windows la consola usa cp1252 y no sabe escribir acentos. Un mensaje de
+    # error de PostgreSQL en espanol tumbaba el logger con UnicodeEncodeError,
+    # justo mientras registraba otro fallo: se perdia la causa real.
+    payload = json.loads(
+        JsonFormatter(service="etl").format(
+            _record(nota="la autentificación falló para el usuario «futbol»")
+        )
+    )
+
+    assert payload["context"]["nota"].startswith("la autentificación")

@@ -155,13 +155,16 @@ def read_team_stats(
         no_cache=_resolve_cache(temporadas, use_cache),
     )
 
+    ligas = leagues or settings.leagues
     frames: dict[str, pd.DataFrame] = {}
     for stat_type in stat_types:
         logger.info(
             "Descargando tabla de equipos",
             extra={"stat_type": stat_type, "perspectiva": "against" if opponent else "for"},
         )
-        frames[stat_type] = reader.read_team_season_stats(
-            stat_type=stat_type, opponent_stats=opponent
+        # Misma pagina que la de jugadores, asi que la segunda perspectiva no
+        # cuesta ninguna peticion extra a FBref.
+        frames[stat_type] = fbref_pages.read_team_stat_type(
+            reader, ligas, temporadas, stat_type, opponent=opponent
         )
     return frames

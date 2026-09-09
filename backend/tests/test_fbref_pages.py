@@ -12,10 +12,13 @@ import pytest
 from futbol_analytics.etl.fbref_pages import (
     PAGES,
     TABLE_IDS,
+    IncompletePageError,
     PageNotAvailableError,
     build_url,
     cache_filename,
+    check_complete,
     extract_player_table,
+    fill_rate,
     season_to_fbref,
     tidy,
 )
@@ -156,3 +159,48 @@ def test_tidy_quita_las_columnas_de_navegacion() -> None:
 
     aplanadas = {" ".join(str(p) for p in c) for c in limpio.columns}
     assert not any("Matches" in nombre for nombre in aplanadas)
+
+
+# --- Completitud ------------------------------------------------------------
+
+# Tabla con identidad completa y estadisticas vacias: exactamente lo que llega
+# cuando la pagina se captura antes de terminar de cargar.
+INCOMPLETA = """
+<table id="stats_passing">
+  <thead>
+    <tr><th colspan="2"></th><th colspan="2">Total</th></tr>
+    <tr><th>Player</th><th>Squad</th><th>Cmp</th><th>PrgDist</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Pedri</td><td>Barcelona</td><td></td><td></td></tr>
+    <tr><td>Cubarsi</td><td>Barcelona</td><td></td><td></td></tr>
+  </tbody>
+</table>
+"""
+
+
+def test_una_tabla_con_datos_pasa_la_guarda() -> None:
+    limpio = tidy(extract_player_table(TABLA, "passing"), "ESP-La Liga", "2526")
+
+    assert fill_rate(limpio) == 1.0
+    check_complete(limpio, "passing", "ESP-La Liga", "2526")
+
+
+def test_una_tabla_sin_numeros_se_rechaza() -> None:
+    # El fallo mas peligroso del scraping: la tabla existe, tiene el numero de
+    # filas correcto y los nombres bien. Solo faltan los numeros, y eso pasaba
+    # por una carga correcta con todas las metricas a NULL.
+    limpio = tidy(extract_player_table(INCOMPLETA, "passing"), "ESP-La Liga", "2526")
+
+    assert fill_rate(limpio) == 0.0
+    with pytest.raises(IncompletePageError, match="incompleta"):
+        check_complete(limpio, "passing", "ESP-La Liga", "2526")
+
+
+def test_la_identidad_no_enmascara_la_falta_de_datos() -> None:
+    # Nacionalidad, edad y ano de nacimiento vienen en el HTML inicial y estan
+    # completos aunque no haya llegado ni un numero: si contasen, la tabla
+    # incompleta pareceria llena.
+    limpio = tidy(extract_player_table(INCOMPLETA, "passing"), "ESP-La Liga", "2526")
+
+    assert fill_rate(limpio) < 0.5
