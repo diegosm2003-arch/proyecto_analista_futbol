@@ -7,6 +7,7 @@ desarrollo local y se sobreescriben con `.env` o con el entorno del contenedor.
 
 from __future__ import annotations
 
+from datetime import date
 from functools import lru_cache
 from typing import Annotated
 from urllib.parse import quote_plus
@@ -61,8 +62,13 @@ class Settings(BaseSettings):
     # validador de abajo, y `LEAGUES=ESP-La Liga,...` revienta el arranque.
     leagues: Annotated[list[str], NoDecode] = Field(default_factory=lambda: list(BIG_5_LEAGUES))
     # Temporadas en formato corto de soccerdata: "2425" = 2024/25.
-    # Por defecto, la temporada en curso. Se calcula en cada arranque en lugar
-    # de fijarse a mano para que el proyecto no envejezca solo.
+    # Por defecto, la temporada en curso. Se calcula sola en lugar de fijarse a
+    # mano para que el proyecto no envejezca solo.
+    #
+    # OJO: este valor se congela al construir los ajustes, y `get_settings` esta
+    # cacheado. Para un comando que arranca y termina da igual, pero un proceso
+    # que vive semanas (el planificador) se quedaria con la temporada que era
+    # cuando arranco. Ese caso usa `seasons_to_load()`, no este campo.
     seasons: Annotated[list[str], NoDecode] = Field(default_factory=lambda: [current_season()])
     # El paso de Cloudflare de soccerdata pulsa la casilla del captcha con
     # PyAutoGUI, asi que necesita una pantalla de verdad: en modo headless no hay
@@ -88,11 +94,29 @@ class Settings(BaseSettings):
     # temporada va disputada. Con la temporada terminada no cambia nada.
     min_minutes_ratio: float = 0.3
 
+    # --- Transfermarkt ---
+    # Envoltorio open source sobre Transfermarkt, que no publica API propia.
+    transfermarkt_url: str = "http://transfermarkt-api:8000"
+    # Un valor de mercado se revisa cada pocos meses, no cada dia. Treinta dias
+    # y no siete porque la carga esta programada cada semana: con una ventana de
+    # una semana, cada sabado se volveria a descargar la liga entera —unas dos
+    # mil peticiones— para traer un dato que cambia trimestralmente. Con treinta
+    # dias, cada ejecucion refresca la cuarta parte que toca y el conjunto se
+    # renueva solo, repartido en el tiempo.
+    #
+    # El coste de la ventana larga es llegar hasta un mes tarde a un fichaje.
+    # Para un historial de carrera es asumible; para saber en que equipo juega
+    # alguien hoy no se usa esta fuente, sino el ETL.
+    transfermarkt_freshness_hours: int = 720
+    # Por debajo de este parecido, un cruce por nombre no se da por bueno. Los
+    # dudosos se guardan sin revisar en lugar de descartarse.
+    fuzzy_match_threshold: float = 85.0
+
     # --- Planificacion del ETL ---
     # Martes y jueves a las 6:00. Las estadisticas de temporada solo cambian
     # cuando se juega una jornada: LaLiga juega de viernes a lunes, con alguna
     # jornada entre semana. Cargar a diario multiplicaria por siete las
-    # peticiones a FBref para uno o dos cambios reales.
+    # peticiones a Understat para uno o dos cambios reales.
     #
     # Los dias van por NOMBRE y no por numero a proposito: APScheduler numera
     # los dias con 0 = lunes, mientras que el cron de toda la vida usa
@@ -105,6 +129,16 @@ class Settings(BaseSettings):
     # Cargar nada mas arrancar el planificador. Util la primera vez, para no
     # esperar al martes.
     etl_run_on_start: bool = False
+    # Transfermarkt va aparte y los sabados por una razon de fondo: el valor de
+    # mercado no es una estadistica de partido. Se revisa unas pocas veces al
+    # ano, asi que seguir el ritmo de la jornada no aportaria un solo dato nuevo.
+    #
+    # El dia elegido no coincide con ninguna carga del ETL a proposito. La carga
+    # de Transfermarkt lee `player_season` para saber a quien buscar, y hacerlo
+    # mientras se esta reescribiendo esa tabla daria una plantilla a medias.
+    #
+    # Vacio para no programarlo.
+    transfermarkt_schedule: str = "0 5 * * sat"
 
     # --- Observabilidad ---
     log_level: str = "INFO"
@@ -134,6 +168,26 @@ class Settings(BaseSettings):
             f"postgresql+psycopg://{self.postgres_user}:{password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+
+def seasons_to_load(settings: Settings, today: date | None = None) -> list[str]:
+    """Temporadas que hay que cargar AHORA.
+
+    Existe por un fallo silencioso del planificador. `SEASONS` no suele estar
+    configurado, asi que su valor sale de `current_season()`, que se evalua una
+    sola vez al construir los ajustes; y `get_settings` esta cacheado. Un
+    planificador levantado en junio seguiria pidiendo la temporada 2025/26 en
+    septiembre, informando "success" en cada ejecucion mientras la plataforma
+    deja de tener los datos de la temporada en curso. No hay error que mirar: el
+    dato simplemente envejece.
+
+    La regla es que una temporada escrita a mano manda siempre —si alguien fija
+    `SEASONS=2425` es porque quiere esa y no otra—, y que la que se calculo sola
+    se vuelve a calcular en cada ejecucion.
+    """
+    if "seasons" in settings.model_fields_set:
+        return settings.seasons
+    return [current_season(today)]
 
 
 @lru_cache

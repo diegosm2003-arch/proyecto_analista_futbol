@@ -63,5 +63,10 @@ def cached_profile(
 
 
 @st.cache_data(ttl=TTL_SECONDS)
+def cached_market(player: str, season: str, team: str | None) -> dict[str, Any]:
+    return get_client().player_market(player=player, season=season, team=team)
+
+
+@st.cache_data(ttl=TTL_SECONDS)
 def cached_styles(season: str, league: str | None, n_styles: int) -> dict[str, Any]:
     return get_client().team_styles(season=season, league=league, n_styles=n_styles)

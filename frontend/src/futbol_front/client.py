@@ -100,6 +100,16 @@ class ApiClient:
             },
         )
 
+    def player_market(
+        self,
+        player: str,
+        season: str,
+        team: str | None = None,
+    ) -> dict[str, Any]:
+        """Ficha, valor de mercado y carrera de un jugador."""
+        ruta = f"/players/{quote(player, safe='')}/market"
+        return self._get(ruta, params={"season": season, "team": team})
+
     # --- Equipos ----------------------------------------------------------
 
     def team_styles(

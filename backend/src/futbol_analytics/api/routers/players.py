@@ -6,6 +6,7 @@ import logging
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel
 
 from futbol_analytics.api import services
 from futbol_analytics.api.dependencies import DataAccessDep
@@ -13,10 +14,14 @@ from futbol_analytics.api.repository import DataAccess
 from futbol_analytics.api.schemas import (
     Basis,
     MetricPercentile,
+    PlayerCard,
+    PlayerMarket,
     PlayerProfile,
     PlayerSummary,
     Population,
     PositionGroup,
+    Transfer,
+    Valuation,
 )
 from futbol_analytics.metrics import PLAYER_METRICS, metrics_for_position
 
@@ -152,6 +157,93 @@ def _percentiles(data: DataAccess, season: str, population: str) -> pd.DataFrame
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
 
+@router.get("/{player}/market", summary="Valor de mercado y carrera de un jugador")
+def market(
+    player: str,
+    season: str,
+    data: DataAccessDep,
+    team: str | None = Query(default=None, description="Necesario si cambio de equipo"),
+) -> PlayerMarket:
+    """Ficha, curva de valor de mercado y carrera, segun Transfermarkt.
+
+    Va aparte del perfil de percentiles a proposito: son dos fuentes distintas y
+    una puede faltar sin que la otra deje de servir. Un jugador recien llegado a
+    la liga tendra percentiles pero quiza no cruce con Transfermarkt todavia.
+
+    Lo que anade es el contexto que a un percentil le falta. Un percentil 95 no
+    significa lo mismo a los 19 anos que a los 33, ni en alguien a quien le
+    queda un ano de contrato que en alguien atado hasta 2031.
+    """
+    jugadores = services.enriched_players(data, season)
+    fila = jugadores[(jugadores["player"] == player) & (jugadores["season"] == season)]
+    if team:
+        fila = fila[fila["team"] == team]
+
+    if fila.empty:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{player!r} no aparece en la temporada {season!r}.",
+        )
+    if len(fila["team"].unique()) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(f"{player!r} tiene varias etapas en {season!r}. Indica el equipo."),
+        )
+
+    ficha = _summary(fila.iloc[0])
+    understat_id = fila.iloc[0].get("understat_id")
+    if not understat_id or pd.isna(understat_id):
+        # Sin identificador estable no hay forma de cruzarlo con Transfermarkt.
+        return PlayerMarket(
+            player=ficha,
+            card=None,
+            current_value_eur=None,
+            peak_value_eur=None,
+            valuations=[],
+            transfers=[],
+            caveats=[
+                "Este jugador no tiene identificador de Understat, asi que no se ha "
+                "podido cruzar con Transfermarkt."
+            ],
+        )
+
+    crudo = data.market(str(understat_id))
+    tasaciones = [Valuation(**_solo(v, Valuation)) for v in crudo["market_value"]]
+    valores = [t.market_value_eur for t in tasaciones if t.market_value_eur is not None]
+
+    avisos = []
+    if not tasaciones:
+        avisos.append(
+            "Sin valor de mercado cargado. El cruce con Transfermarkt puede estar "
+            "pendiente de revision, o la carga aun no ha llegado a este jugador."
+        )
+    if tasaciones and valores and valores[-1] < max(valores):
+        # Dato con lectura futbolistica: no es un fallo, es una carrera.
+        avisos.append(
+            f"Su valor actual esta por debajo de su maximo "
+            f"({max(valores) / 1e6:.0f} M EUR). Suele indicar edad, lesiones o menos minutos."
+        )
+
+    return PlayerMarket(
+        player=ficha,
+        card=PlayerCard(**_solo(crudo["profile"], PlayerCard)) if crudo["profile"] else None,
+        current_value_eur=valores[-1] if valores else None,
+        peak_value_eur=max(valores) if valores else None,
+        valuations=tasaciones,
+        transfers=[Transfer(**_solo(t, Transfer)) for t in crudo["transfers"]],
+        caveats=avisos,
+    )
+
+
+def _solo(fila: dict, modelo: type[BaseModel]) -> dict:
+    """Quita de una fila de base de datos lo que el modelo no declara.
+
+    Las tablas llevan columnas de control (`scraped_at`, identificadores
+    internos) que no pintan nada en una respuesta publica.
+    """
+    return {k: v for k, v in fila.items() if k in modelo.model_fields}
+
+
 def _summary(fila: pd.Series) -> PlayerSummary:
     return PlayerSummary(
         league=fila["league"],
@@ -166,6 +258,9 @@ def _summary(fila: pd.Series) -> PlayerSummary:
 
 def _metrics(perfil: pd.DataFrame, basis: Basis) -> list[MetricPercentile]:
     columna = f"percentile_{basis}"
+    # El catalogo es quien sabe que metricas miden al equipo tanto como al
+    # jugador; el perfil solo trae numeros.
+    dependen_del_equipo = {m.name for m in PLAYER_METRICS if m.team_dependent}
     ordenado = perfil.sort_values(columna, ascending=False, na_position="last")
     return [
         MetricPercentile(
@@ -176,6 +271,7 @@ def _metrics(perfil: pd.DataFrame, basis: Basis) -> list[MetricPercentile]:
             padj=_numero(fila.get("padj")),
             percentile=_numero(fila.get(columna)),
             higher_is_better=_booleano(fila.get("higher_is_better")),
+            team_dependent=fila["metric"] in dependen_del_equipo,
         )
         for _, fila in ordenado.iterrows()
     ]

@@ -12,17 +12,21 @@ indireccion.
 from __future__ import annotations
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     Float,
     Index,
     Integer,
     MetaData,
+    Numeric,
     String,
     Table,
     Text,
     func,
+    text,
 )
 
 from futbol_analytics.metrics import PLAYER_METRICS, TEAM_METRICS, Metric
@@ -65,6 +69,15 @@ player_season = Table(
     Column("season", Text, primary_key=True),
     Column("team", Text, primary_key=True),
     Column("player", Text, primary_key=True),
+    # Identidad externa. Es la unica forma de cruzar con otras fuentes sin
+    # depender del nombre, que se escribe distinto en cada web ("Abde Rebbach"
+    # frente a "Abderrahmane Rebbach") y no distingue homonimos.
+    Column(
+        "understat_id",
+        Text,
+        nullable=True,
+        comment="Identificador estable del jugador en Understat",
+    ),
     # Identidad.
     Column("nation", Text, nullable=True),
     Column("age", Integer, nullable=True),
@@ -131,4 +144,127 @@ etl_run = Table(
     Column("team_rows", Integer, nullable=True),
     Column("error", Text, nullable=True),
     comment="Registro de ejecuciones del ETL.",
+)
+
+
+# ---------------------------------------------------------------------------
+# Transfermarkt: valor de mercado y fichajes
+# ---------------------------------------------------------------------------
+#
+# Estas tablas se cuelgan del identificador de Understat y no de una clave
+# entera propia. El motivo es que no existe una tabla de jugadores: la unidad
+# del modelo es el jugador-temporada-equipo, porque el rendimiento de alguien
+# traspasado en enero son dos hechos distintos. El valor de mercado, en cambio,
+# es del jugador y no de su etapa en un club, asi que necesita una identidad que
+# atraviese temporadas. `understat_id` es la unica que tenemos y es estable.
+
+player_id_mapping = Table(
+    "player_id_mapping",
+    metadata,
+    Column("understat_id", Text, primary_key=True),
+    Column("transfermarkt_id", Text, nullable=True),
+    Column("player_name", Text, nullable=False, comment="Nombre con el que se resolvio"),
+    Column(
+        "match_method",
+        Text,
+        nullable=False,
+        comment="exact, fuzzy o manual",
+    ),
+    Column(
+        "match_confidence",
+        Float,
+        nullable=True,
+        comment="0 a 100. Por debajo del umbral no se usa hasta revisarlo",
+    ),
+    # Los cruces dudosos no se descartan: se guardan sin revisar y quedan fuera
+    # de la carga hasta que alguien los confirme. Descartarlos perderia el
+    # trabajo de haberlos encontrado; usarlos a ciegas contaminaria los datos.
+    Column("reviewed", Boolean, nullable=False, server_default=text("false")),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint(
+        "match_method IN ('exact', 'fuzzy', 'history', 'squad', 'manual')",
+        name="match_method_valido",
+    ),
+    comment="Puente entre el identificador de Understat y el de Transfermarkt.",
+)
+
+
+player_market_value = Table(
+    "player_market_value",
+    metadata,
+    Column("understat_id", Text, primary_key=True),
+    Column("valuation_date", Date, primary_key=True),
+    Column("market_value_eur", Numeric(14, 2), nullable=True),
+    Column("club_at_time", Text, nullable=True),
+    Column("age_at_time", Integer, nullable=True),
+    Column("scraped_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    comment="Historico de valor de mercado por jugador y fecha de tasacion.",
+)
+
+Index("ix_market_value_fecha", player_market_value.c.valuation_date)
+
+
+player_profile = Table(
+    "player_profile",
+    metadata,
+    Column("understat_id", Text, primary_key=True),
+    Column("transfermarkt_id", Text, nullable=True),
+    Column("player_name", Text, nullable=True),
+    Column("date_of_birth", Date, nullable=True),
+    Column("age", Integer, nullable=True),
+    Column(
+        "position",
+        Text,
+        nullable=True,
+        comment="Posicion concreta de Transfermarkt (Centre-Back, Left Winger...)",
+    ),
+    Column("nationality", Text, nullable=True),
+    Column("height_cm", Integer, nullable=True),
+    Column("foot", Text, nullable=True),
+    Column("joined_on", Date, nullable=True, comment="Fecha de llegada al club actual"),
+    Column("signed_from", Text, nullable=True),
+    Column("contract_until", Date, nullable=True),
+    Column("scraped_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    comment=(
+        "Ficha del jugador en Transfermarkt: edad, posicion concreta y contrato. "
+        "Es el contexto que un percentil por si solo no da."
+    ),
+)
+
+player_transfers = Table(
+    "player_transfers",
+    metadata,
+    Column("understat_id", Text, primary_key=True),
+    Column("transfer_date", Date, primary_key=True),
+    Column("club_from", Text, primary_key=True),
+    Column("club_to", Text, primary_key=True),
+    Column("fee_eur", Numeric(14, 2), nullable=True),
+    Column(
+        "transfer_type",
+        Text,
+        nullable=True,
+        comment="traspaso, cesion, fin_contrato o libre",
+    ),
+    Column("market_value_at_transfer_eur", Numeric(14, 2), nullable=True),
+    Column("season", Text, nullable=True),
+    Column("scraped_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    comment="Historial de fichajes por jugador.",
+)
+
+
+# El valor de un equipo se deriva de la suma de su plantilla y no se scrapea
+# aparte: asi siempre cuadra con los jugadores que tenemos cargados, en lugar de
+# ser una cifra ajena que puede incluir a quien no esta en nuestra base.
+team_market_value = Table(
+    "team_market_value",
+    metadata,
+    Column("league", Text, primary_key=True),
+    Column("season", Text, primary_key=True),
+    Column("team", Text, primary_key=True),
+    Column("valuation_date", Date, primary_key=True),
+    Column("market_value_eur", Numeric(14, 2), nullable=True),
+    Column("squad_size", Integer, nullable=True, comment="Jugadores con valor conocido"),
+    Column("squad_total", Integer, nullable=True, comment="Jugadores del equipo en la temporada"),
+    Column("scraped_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    comment="Valor de mercado agregado por equipo, derivado de sus jugadores.",
 )

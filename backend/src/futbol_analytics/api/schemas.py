@@ -9,7 +9,7 @@ hallazgos son defendibles.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -59,6 +59,9 @@ class MetricInfo(BaseModel):
         description="Nulo cuando la metrica describe estilo y no calidad"
     )
     possession_sensitive: bool = Field(description="Si se ofrece tambien ajustada por posesion")
+    team_dependent: bool = Field(
+        default=False, description="Si la metrica premia jugar en un equipo dominante"
+    )
 
 
 class RoleInfo(BaseModel):
@@ -121,6 +124,9 @@ class MetricPercentile(BaseModel):
     padj: float | None = Field(default=None, description="Ajustado por posesion del equipo")
     percentile: float | None = Field(description="0 a 100 dentro de su poblacion")
     higher_is_better: bool | None
+    team_dependent: bool = Field(
+        default=False, description="Si la metrica premia jugar en un equipo dominante"
+    )
 
 
 class PlayerProfile(BaseModel):
@@ -144,6 +150,61 @@ class PlayerProfile(BaseModel):
         description="Advertencias de lectura del perfil",
     )
     metrics: list[MetricPercentile]
+
+
+class PlayerCard(BaseModel):
+    """Ficha de Transfermarkt: el contexto que un percentil no da."""
+
+    age: int | None
+    date_of_birth: date | None
+    position: str | None = Field(
+        default=None, description="Posicion concreta: Centre-Back, Left Winger..."
+    )
+    nationality: str | None
+    height_cm: int | None
+    foot: str | None
+    joined_on: date | None
+    signed_from: str | None
+    contract_until: date | None
+
+
+class Valuation(BaseModel):
+    """Una tasacion en un momento de la carrera."""
+
+    valuation_date: date
+    market_value_eur: float | None
+    club_at_time: str | None
+    age_at_time: int | None
+
+
+class Transfer(BaseModel):
+    """Un movimiento de la carrera."""
+
+    transfer_date: date
+    club_from: str
+    club_to: str
+    fee_eur: float | None
+    transfer_type: str | None = Field(
+        default=None, description="traspaso, cesion o libre. Nulo si no consta el importe"
+    )
+    market_value_at_transfer_eur: float | None
+    season: str | None
+
+
+class PlayerMarket(BaseModel):
+    """Valor de mercado y carrera de un jugador.
+
+    Va aparte del perfil deportivo a proposito: son fuentes distintas y una
+    puede faltar sin que la otra deje de servir.
+    """
+
+    player: PlayerSummary
+    card: PlayerCard | None
+    current_value_eur: float | None = Field(description="Ultima tasacion conocida")
+    peak_value_eur: float | None = Field(description="Maximo historico")
+    valuations: list[Valuation]
+    transfers: list[Transfer]
+    caveats: list[str] = Field(default_factory=list)
 
 
 class TeamStyle(BaseModel):

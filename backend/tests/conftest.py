@@ -57,11 +57,15 @@ class FakeDataAccess:
         teams: pd.DataFrame,
         version: str = "v1",
         runs: list[dict] | None = None,
+        market: dict | None = None,
     ) -> None:
         self._players = players
         self._teams = teams
         self._version = version
         self._runs = runs if runs is not None else [_ejecucion_correcta()]
+        # Por defecto, un jugador sin cruzar con Transfermarkt: es el estado
+        # normal mientras la carga no haya llegado a el.
+        self._market = market or {"profile": None, "market_value": [], "transfers": []}
 
     def ensure_schema(self) -> None:
         """No hay esquema que crear: los datos viven en DataFrames."""
@@ -84,6 +88,9 @@ class FakeDataAccess:
 
     def last_runs(self, limit: int = 5) -> list[dict]:
         return self._runs[:limit]
+
+    def market(self, understat_id: str) -> dict:
+        return self._market
 
 
 LIGAS = [

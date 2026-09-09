@@ -120,3 +120,73 @@ def test_una_carga_ya_en_marcha_no_es_un_fallo(
 
     assert "omitida" in caplog.text.lower()
     assert "fallado" not in caplog.text.lower()
+
+
+# --- Carga de Transfermarkt -------------------------------------------------
+
+SABADO = 5
+
+
+def test_el_valor_de_mercado_va_a_otro_ritmo_que_las_estadisticas() -> None:
+    # Una tasacion se revisa unas pocas veces al ano. Seguir el ritmo de la
+    # jornada no traeria un solo dato nuevo y castigaria a la fuente.
+    ajustes = Settings(_env_file=None)
+
+    assert ajustes.transfermarkt_schedule == "0 5 * * sat"
+
+
+def test_las_dos_cargas_nunca_coinciden_en_el_mismo_dia() -> None:
+    # Transfermarkt lee `player_season` para saber a quien buscar. Si lo hiciera
+    # mientras el ETL reescribe esa tabla, veria una plantilla a medias.
+    planificador = scheduler.build_scheduler()
+    trabajo = planificador.get_job(scheduler.TRANSFERMARKT_JOB_ID)
+
+    disparos, anterior, ahora = [], None, AHORA
+    for _ in range(4):
+        siguiente = trabajo.trigger.get_next_fire_time(anterior, ahora)
+        disparos.append(siguiente)
+        anterior, ahora = siguiente, siguiente
+
+    assert {d.weekday() for d in disparos} == {SABADO}
+    assert {d.weekday() for d in _proximos_disparos(4)}.isdisjoint({SABADO})
+
+
+def test_sin_cadencia_configurada_no_se_programa(monkeypatch: pytest.MonkeyPatch) -> None:
+    # La via para desactivar la carga sin tocar el codigo ni el compose.
+    monkeypatch.setenv("TRANSFERMARKT_SCHEDULE", "")
+    get_settings.cache_clear()
+
+    assert scheduler.build_scheduler().get_job(scheduler.TRANSFERMARKT_JOB_ID) is None
+
+
+def test_un_fallo_de_transfermarkt_no_mata_al_planificador(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Que Transfermarkt no responda un sabado no puede dejar sin carga de
+    # estadisticas al martes siguiente.
+    def revienta() -> None:
+        raise RuntimeError("Transfermarkt no responde")
+
+    monkeypatch.setattr(scheduler.transfermarkt, "run", revienta)
+
+    scheduler.run_transfermarkt_once()
+
+
+def test_la_carga_programada_usa_la_temporada_del_dia_de_la_ejecucion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # El planificador vive semanas y cruza el cambio de temporada de julio. Si
+    # resolviera la temporada al arrancar, uno levantado en junio seguiria
+    # cargando la anterior en septiembre e informando "success" cada martes.
+    pedidas: list[list[str]] = []
+
+    def espia(leagues, seasons):
+        pedidas.append(list(seasons))
+        raise RuntimeError("no hace falta cargar nada para comprobar esto")
+
+    monkeypatch.setattr(scheduler.pipeline, "run", espia)
+    monkeypatch.setattr(scheduler, "seasons_to_load", lambda ajustes: ["2627"])
+
+    scheduler.run_once()
+
+    assert pedidas == [["2627"]]

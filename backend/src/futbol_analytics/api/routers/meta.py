@@ -48,6 +48,7 @@ def metrics() -> list[MetricInfo]:
             positions=list(metric.positions),
             higher_is_better=metric.higher_is_better,
             possession_sensitive=metric.possession_sensitive,
+            team_dependent=metric.team_dependent,
         )
         for metric in PLAYER_METRICS
         if metric.per90

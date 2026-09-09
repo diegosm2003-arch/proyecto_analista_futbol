@@ -30,6 +30,9 @@ etl = [
     "pandas>=2.2",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
+    # Cruce de nombres entre fuentes. Su `token_sort_ratio` aguanta bien el
+    # orden distinto de nombre y apellidos, que es el caso habitual.
+    "rapidfuzz>=3.9",
 ]
 # Planificacion de la carga. Aparte del extra "etl" para que los tests del
 # planificador se puedan ejecutar sin instalar soccerdata, que arrastra el

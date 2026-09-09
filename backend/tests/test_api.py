@@ -13,7 +13,10 @@ from fastapi.testclient import TestClient
 from futbol_analytics import __version__
 from futbol_analytics.analysis.roles import ARCHETYPES
 from futbol_analytics.api import cache
+from futbol_analytics.api.dependencies import get_data_access
+from futbol_analytics.api.main import app
 from futbol_analytics.templates import PIZZA_TEMPLATES
+from tests.conftest import FakeDataAccess
 
 TEMPORADA = "2526"
 
@@ -56,7 +59,10 @@ def test_la_direccion_de_cada_metrica_llega_al_cliente(client: TestClient) -> No
     metricas = {m["name"]: m for m in client.get("/meta/metrics").json()}
 
     assert metricas["goals"]["higher_is_better"] is True
-    assert metricas["yellow_cards"]["higher_is_better"] is False
+    # Las tarjetas no tienen direccion: describen como compite un jugador. Dar
+    # por mejor al que menos ve premiaria al pivote que no hace la falta
+    # tactica, y la interfaz llego a presentarlo como una fortaleza.
+    assert metricas["yellow_cards"]["higher_is_better"] is None
 
 
 def test_el_catalogo_publica_las_metricas_de_construccion(client: TestClient) -> None:
@@ -466,3 +472,103 @@ def test_una_instalacion_vacia_responde_sin_datos_en_lugar_de_fallar(
     assert catalogo.json()["seasons"] == []
     assert salud["data_version"] == "sin-datos"
     assert salud["last_etl_status"] is None
+
+
+def test_el_perfil_avisa_de_las_metricas_que_miden_al_equipo(client: TestClient) -> None:
+    # xGChain y xGBuildup cuentan posesiones, asi que premian jugar en un equipo
+    # dominante: en nuestros datos, tras De Jong y Pedri, los siguientes en
+    # xGBuildup son la defensa del Barcelona entera. La interfaz necesita saberlo
+    # para no presentarlo como merito individual.
+    metricas = {m["name"]: m for m in client.get("/meta/metrics").json()}
+
+    assert metricas["xg_buildup"]["team_dependent"] is True
+    assert metricas["xg_chain"]["team_dependent"] is True
+    assert metricas["np_xg"]["team_dependent"] is False
+
+
+# --- Valor de mercado y carrera ---------------------------------------------
+
+
+def test_sin_cruce_con_transfermarkt_la_respuesta_lo_dice(client: TestClient) -> None:
+    # Es el estado normal de un jugador al que la carga aun no ha llegado, o
+    # cuyo cruce espera revision. No es un error: es una respuesta honesta.
+    jugador = client.get("/players?season=2526&limit=1").json()[0]
+
+    r = client.get(f"/players/{jugador['player']}/market?season=2526")
+
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["current_value_eur"] is None
+    assert cuerpo["valuations"] == []
+    assert any("Transfermarkt" in aviso for aviso in cuerpo["caveats"])
+
+
+def test_la_carrera_y_el_valor_llegan_al_cliente(
+    jugadores: pd.DataFrame, equipos: pd.DataFrame, logging_intacto: None
+) -> None:
+    mercado = {
+        "profile": {
+            "understat_id": "1",
+            "age": 25,
+            "date_of_birth": "2001-04-05",
+            "position": "Centre-Back",
+            "nationality": "Spain",
+            "height_cm": 193,
+            "foot": "right",
+            "joined_on": "2025-01-07",
+            "signed_from": "RCD Espanyol Barcelona",
+            "contract_until": "2031-06-30",
+            "scraped_at": "2026-09-09T00:00:00Z",
+        },
+        "market_value": [
+            {
+                "understat_id": "1",
+                "valuation_date": "2024-05-01",
+                "market_value_eur": 60000000.0,
+                "club_at_time": "FC Barcelona",
+                "age_at_time": 23,
+            },
+            {
+                "understat_id": "1",
+                "valuation_date": "2026-05-01",
+                "market_value_eur": 45000000.0,
+                "club_at_time": "FC Barcelona",
+                "age_at_time": 25,
+            },
+        ],
+        "transfers": [
+            {
+                "understat_id": "1",
+                "transfer_date": "2025-01-07",
+                "club_from": "RCD Espanyol",
+                "club_to": "FC Barcelona",
+                "fee_eur": 25000000.0,
+                "transfer_type": "traspaso",
+                "market_value_at_transfer_eur": 30000000.0,
+                "season": "24/25",
+            }
+        ],
+    }
+    con_id = jugadores.copy()
+    con_id["understat_id"] = "1"
+
+    cache.clear()
+    app.dependency_overrides[get_data_access] = lambda: FakeDataAccess(
+        con_id, equipos, market=mercado
+    )
+    try:
+        with TestClient(app) as cliente:
+            nombre = con_id[con_id["season"] == "2526"].iloc[0]["player"]
+            cuerpo = cliente.get(f"/players/{nombre}/market?season=2526").json()
+    finally:
+        app.dependency_overrides.clear()
+        cache.clear()
+
+    assert cuerpo["card"]["position"] == "Centre-Back"
+    assert cuerpo["card"]["contract_until"] == "2031-06-30"
+    assert cuerpo["current_value_eur"] == 45000000.0
+    assert cuerpo["peak_value_eur"] == 60000000.0
+    assert len(cuerpo["transfers"]) == 1
+    # Un valor por debajo del maximo no es un fallo del dato, es una carrera: se
+    # explica en lugar de dejar que el usuario lo lea como un error.
+    assert any("maximo" in aviso for aviso in cuerpo["caveats"])

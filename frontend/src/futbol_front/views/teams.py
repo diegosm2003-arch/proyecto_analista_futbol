@@ -132,5 +132,5 @@ def _tabla(informe: dict) -> None:
     st.dataframe(
         filas[columnas].sort_values("Estilo").round(2),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )

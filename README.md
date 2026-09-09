@@ -91,7 +91,8 @@ docker-compose.yml
 
 ## Modelo de datos
 
-Tres tablas, definidas en [`db/schema.py`](src/futbol_analytics/db/schema.py):
+Definidas en [`db/schema.py`](src/futbol_analytics/db/schema.py). Tres tablas
+del ETL principal:
 
 - **`player_season`**: una fila por *(liga, temporada, equipo, jugador)*. El
   equipo forma parte de la clave a proposito: un jugador traspasado en enero
@@ -103,22 +104,36 @@ Tres tablas, definidas en [`db/schema.py`](src/futbol_analytics/db/schema.py):
 - **`etl_run`**: registro de cada carga, para poder atribuir un dato raro a una
   ejecucion concreta.
 
+Y cuatro de Transfermarkt, que van por su cuenta:
+
+- **`player_id_mapping`**: el puente entre las dos fuentes, con la puntuacion del
+  cruce y si alguien lo ha confirmado a mano.
+- **`player_market_value`**: una fila por *(jugador, fecha de tasacion)*. Se
+  guarda el historico entero, no el valor de hoy: la curva de valor de un
+  canterano dice mas que su cifra actual.
+- **`player_transfers`**: una fila por *(jugador, fecha, club de origen, club de
+  destino)*.
+- **`team_market_value`**: el valor de plantilla, **derivado** sumando el de sus
+  jugadores en lugar de scrapearse aparte, para que siempre cuadre con la
+  plantilla que tenemos cargada.
+
 Las columnas de metricas **se generan desde el catalogo** de
 [`metrics.py`](src/futbol_analytics/metrics.py), asi que esquema y catalogo no
 pueden desincronizarse. Dos reglas:
 
 - Se guardan **totales, nunca valores por 90**. El per-90 depende del umbral de
   minutos y de la poblacion de comparacion: es analisis, no un hecho.
-- Un hueco de FBref queda **NULL, nunca cero**. Un cero afirmaria algo falso
-  sobre el jugador.
+- Un hueco de la fuente queda **NULL, nunca cero**. Un cero afirmaria algo
+  falso sobre el jugador.
 
 ### La limitacion de la posicion
 
-FBref, a nivel de temporada, solo publica `GK` / `DF` / `MF` / `FW`. No separa
-central de lateral ni mediocentro de mediapunta, y comparar un central con un
-lateral en centros al area no produce un percentil informativo.
+Understat, a nivel de temporada, solo publica `GK` / `DF` / `MF` / `FW`. No
+separa central de lateral ni mediocentro de mediapunta, y comparar un central
+con un lateral en centros al area no produce un percentil informativo. Ademas
+marca a 71 jugadores solo como suplentes (`S`), que se quedan sin grupo.
 
-El esquema guarda `position_group` (lo que FBref da, verificable) y deja
+El esquema guarda `position_group` (lo que la fuente da, verificable) y deja
 `detailed_position` **nula hasta la fase de analisis**, donde el clustering de
 roles la asignara a partir de metricas que el ETL ya carga: toques por zona del
 campo, centros, duelos aereos y conducciones progresivas. Un central y un
@@ -155,18 +170,44 @@ docker compose --profile scheduler up -d
 
 Levanta un contenedor que ejecuta el ETL de forma periodica. Por defecto,
 **martes y jueves a las 6:00 hora de Madrid**: las estadisticas de temporada
-solo cambian cuando se juega una jornada, y FBref limita a una peticion cada 7
-segundos, asi que cargar a diario seria castigarlo para nada.
+solo cambian cuando se juega una jornada, asi que cargar a diario multiplicaria
+por siete las peticiones a Understat para uno o dos cambios reales.
+
+Con el perfil levantado tambien se programa **la carga de Transfermarkt, los
+sabados a las 5:00**. Va a otro ritmo y otro dia a proposito: una tasacion se
+revisa unas pocas veces al ano, y ademas esa carga lee `player_season` para
+saber a quien buscar, asi que hacerlo mientras el ETL reescribe esa tabla daria
+una plantilla a medias.
 
 | Variable | Por defecto | Que hace |
 | --- | --- | --- |
 | `ETL_SCHEDULE` | `0 6 * * tue,thu` | Cadencia, en formato cron |
 | `SCHEDULE_TIMEZONE` | `Europe/Madrid` | Para que "el martes por la manana" no dependa del cambio de hora |
 | `ETL_RUN_ON_START` | `false` | Cargar al levantar el contenedor, sin esperar al martes |
+| `TRANSFERMARKT_SCHEDULE` | `0 5 * * sat` | Cadencia del valor de mercado. Vacio para no programarlo |
+| `TRANSFERMARKT_FRESHNESS_HOURS` | `720` | Cuanto se da por fresca una tasacion: treinta dias |
 
 > **Levantalo en un solo equipo.** El candado que impide dos cargas simultaneas
 > vive dentro de la base de datos, asi que no protege entre maquinas: dos
-> planificadores activos scrapearian FBref el doble sin traer nada nuevo.
+> planificadores activos consultarian las fuentes el doble sin traer nada nuevo.
+
+> **La temporada se resuelve en cada ejecucion, no al arrancar.** Es la
+> diferencia entre este proceso y un comando: vive semanas y cruza el cambio de
+> temporada de julio. Resolviendola al arrancar —que es lo que hacia—, un
+> planificador levantado en junio seguiria cargando la temporada anterior en
+> septiembre e informando `success` cada martes, sin ningun error que mirar. Una
+> temporada escrita a mano en `SEASONS` manda siempre; la que se calcula sola se
+> recalcula cada vez.
+
+> **La ventana de frescura son treinta dias, no siete.** Con la carga de
+> Transfermarkt programada cada sabado, una ventana de una semana volveria a
+> descargar la liga entera en cada ejecucion —miles de peticiones— para traer un
+> dato que cambia trimestralmente. Con treinta dias, cada ejecucion refresca la
+> parte que toca y el conjunto se renueva solo, repartido en el tiempo.
+>
+> La ficha del jugador (edad, posicion, contrato) **no pasa por esa ventana**:
+> viene incluida en la plantilla, no cuesta una peticion aparte, y se actualiza
+> en cada ejecucion.
 
 > **Los dias van por nombre, no por numero.** APScheduler numera `0 = lunes` y
 > el cron de toda la vida usa `0 = domingo`. Escrito `0 6 * * 2,4` la carga
@@ -183,7 +224,7 @@ programado".
 Dos protecciones que hacen segura la automatizacion:
 
 - **Candado sobre `etl_run`.** Dos cargas simultaneas no cargarian nada nuevo y
-  duplicarian la presion sobre FBref. Una ejecucion que lleve mas de 3 horas en
+  duplicarian la presion sobre la fuente. Una ejecucion que lleve mas de 3 horas en
   marcha se da por muerta, para que un contenedor caido no bloquee para siempre.
 - **La temporada en curso nunca se lee del cache.** `soccerdata` guarda el HTML
   descargado, lo cual es perfecto para una temporada cerrada y catastrofico para
@@ -205,13 +246,63 @@ docker compose --profile etl run --rm etl --only teams     # solo equipos
 ```
 
 La carga es un `UPSERT` sobre la clave natural: relanzarla actualiza, nunca
-duplica. Importa porque FBref corrige datos a posteriori y la temporada en curso
+duplica. Importa porque las fuentes corrigen datos a posteriori y la temporada en curso
 se re-scrapea cada semana.
 
 `--inspect` vuelca a `data/fbref_columns.json` las columnas que FBref publica
 hoy, ya normalizadas, junto a las que el catalogo espera y las que faltan. FBref
 renombra columnas de vez en cuando; esto convierte ese fallo en un diff legible
 en lugar de una depuracion a ciegas dentro del contenedor.
+
+## Valor de mercado y fichajes
+
+```bash
+docker compose --profile transfermarkt up -d          # el servicio de consulta
+docker compose --profile transfermarkt --profile etl run --rm   --entrypoint python etl -m futbol_analytics.etl.transfermarkt --season 2526
+```
+
+Transfermarkt no publica API, asi que se consulta a traves de un envoltorio
+open source levantado como un servicio mas. Anade dos cosas que el dato
+deportivo no da: **cuanto vale un jugador y por donde ha pasado**. Un percentil
+alto en un jugador de 30 millones y en uno de 3 no significan lo mismo.
+
+### El problema de verdad es cruzar los nombres
+
+Las dos fuentes no comparten ningun identificador, y el nombre es un
+identificador pesimo en futbol: cada web elige una grafia, los acentos van y
+vienen, y hay homonimos. El cruce
+([`matching.py`](src/futbol_analytics/etl/transfermarkt/matching.py)) se apoya
+en tres reglas:
+
+- **Se comparan nombres normalizados** (sin acentos, sin puntuacion) con
+  `token_sort_ratio`, porque el orden de nombre y apellido cambia entre fuentes.
+- **El club desempata, pero no manda.** La busqueda devuelve el club *actual*, y
+  nosotros cargamos temporadas pasadas: en septiembre de 2026 Transfermarkt
+  situa a Lewandowski en el Chicago Fire. Penalizar eso mandaba a revision
+  manual cruces evidentes.
+- **Cuando hay empate se mira la carrera.** Si dos futbolistas comparten nombre
+  al 100 %, se consulta el historico de tasaciones de cada uno: solo uno habra
+  jugado en el equipo que estamos cargando. Es lo que resuelve a Lewandowski sin
+  intervencion humana.
+
+Un cruce por debajo de la confianza **no se descarta ni se usa**: se guarda sin
+revisar y queda fuera de la carga. Cargar el valor de mercado de otra persona es
+peor que no tener el dato.
+
+```bash
+# Los que esperan confirmacion
+docker compose --profile transfermarkt --profile etl run --rm   --entrypoint python etl -m futbol_analytics.etl.transfermarkt --pendientes
+```
+
+Sobre la plantilla del Barcelona 2025/26: **26 de 29 jugadores resueltos sin
+intervencion**. Los tres restantes son ambiguedad real —dos canteranos con
+homonimos en clubes portugueses y un apodo (`Alex Balde` frente a `Alejandro
+Balde`)—, exactamente los casos que deben esperar a una persona.
+
+> **El valor de plantilla solo se publica si esta tasada.** Por debajo del 70 %
+> de la plantilla no se guarda nada. Una suma parcial no es un valor bajo, es un
+> valor falso: cargando solo el Barcelona aparecia el PSG valorado en 10 M
+> porque uno de sus futbolistas habia jugado antes alli.
 
 ## Analisis
 
@@ -250,7 +341,7 @@ si es bueno.
 
 ### Roles de jugador
 
-Rellena la `detailed_position` que FBref no publica. Dos decisiones:
+Rellena la `detailed_position` que la fuente no publica. Dos decisiones:
 
 **Las features son proporciones, no volumenes.** En lugar de "entradas por 90" se
 usa "que porcentaje de sus toques son en el ultimo tercio" o "cuantos de cada 100
@@ -283,7 +374,7 @@ Los estilos no se nombran de antemano: cada cluster se describe por sus dos
 rasgos mas extremos ("dominio del balon, presion adelantada"). Los estilos cambian
 de temporada en temporada y fijar una lista seria forzar la realidad.
 
-> **Sobre la PPDA:** la canonica se limita al 60 % del campo rival, y FBref no
+> **Sobre la PPDA:** la canonica se limita al 60 % del campo rival, y la fuente no
 > publica el pase del rival por zonas. La que se calcula aqui son pases del rival
 > por accion defensiva propia sobre todo el campo: ordena bien a los equipos, pero
 > **no es comparable con la PPDA de otras fuentes**. Si hiciera falta la real,
@@ -305,6 +396,23 @@ PostgreSQL. Documentacion interactiva en `/docs`.
 | `GET /players` | Busqueda con filtros por liga, posicion, rol y nombre |
 | `GET /players/{player}/profile` | Perfil de percentiles, listo para el pizza chart |
 | `GET /teams/styles` | Estilos de juego de la temporada |
+
+### Mercado y carrera
+
+`GET /players/{jugador}/market` devuelve la ficha de Transfermarkt (edad,
+posicion concreta, pie, contrato), la curva completa de valor de mercado y la
+carrera del futbolista.
+
+Va **aparte del perfil de percentiles** a proposito: son dos fuentes distintas y
+una puede faltar sin que la otra deje de servir. Un jugador recien llegado a la
+liga tendra percentiles y quiza aun no cruce con Transfermarkt.
+
+Lo que anade es el contexto que a un percentil le falta. Un percentil 95 no
+significa lo mismo a los 19 anos que a los 33, ni en alguien a quien le queda un
+ano de contrato que en alguien atado hasta 2031. Y la **curva** dice mas que la
+cifra: distingue al canterano en subida del veterano en caida aunque hoy valgan
+lo mismo, y por eso la respuesta avisa cuando el valor actual esta por debajo
+del maximo historico.
 
 ### El orden de las operaciones
 
@@ -373,6 +481,38 @@ dejarlo sin invertir situaria a los equipos mas agresivos abajo.
 **Como leerlo.** Que es un percentil, por que la poblacion son las Big 5 y las
 tres advertencias que mas se malinterpretan.
 
+### Donde se sale de lo normal
+
+Un pizza chart ensena doce ejes a la vez y no dice por donde empezar. Debajo del
+grafico, la interfaz senala las metricas en las que el jugador esta por encima
+del percentil 90 o por debajo del 10, lo mas extremo primero. Es la pregunta que
+se hace un analista delante de un perfil: que tiene este jugador de
+verdaderamente distinto.
+
+**Un extremo no siempre es bueno ni malo**, y por eso hay tres etiquetas:
+
+- **Fortaleza** y **debilidad**, para las metricas con direccion.
+- **Rasgo**, para las de estilo. Estar en el percentil 97 de tiros no es un
+  elogio, es disparar mucho; si acierta o no lo dicen las metricas de
+  finalizacion, no esa.
+
+Fue precisamente este aviso el que dejo a la vista un error del catalogo: las
+tarjetas estaban como "menos es mejor", asi que la interfaz presentaba *pocas
+amarillas* como una **fortaleza** de Pedri, por delante de sus pases clave. Las
+tarjetas no miden calidad, describen como compite un jugador: dar por mejor al
+que menos ve premiaria al pivote que no hace la falta tactica y al central que
+no sale a cortar. Ahora van sin direccion.
+
+Dos matices acompanan al aviso cuando tocan:
+
+- **Metricas que miden al equipo tanto como al jugador.** xGChain y xGBuildup
+  cuentan posesiones, y un equipo que tiene el balon las genera para todos los
+  suyos. En nuestros datos, tras De Jong y Pedri, los siguientes en xGBuildup
+  son la defensa del Barcelona entera. El catalogo las marca `team_dependent` y
+  el aviso lo dice.
+- **Poblacion pequena.** Por debajo de 50 jugadores comparables, el percentil se
+  mueve demasiado como para construir nada encima.
+
 ### Los ejes del grafico son fijos
 
 Doce metricas por posicion, agrupadas en ataque, posesion y defensa, definidas en
@@ -387,7 +527,7 @@ porciones son demasiado estrechas para leer la etiqueta.
 Se sirven desde la API y no se hardcodean en Streamlit para que el chat de la
 fase 6 use exactamente los mismos ejes.
 
-**Los porteros no tienen grafico.** Del catalogo publico de FBref solo se cargan
+**Los porteros no tienen grafico.** Del catalogo publico de la fuente solo se cargan
 tres metricas de porteria, y un pizza chart de tres porciones dice menos que una
 tabla. Es una limitacion del dato, no una decision de diseno: se resolveria
 anadiendo las tablas avanzadas de portero al ETL.
@@ -414,11 +554,11 @@ ignorados.
 Dos consecuencias:
 
 - Hay que **cargar los datos en cada equipo**, o mover un volcado con
-  `pg_dump`. Dos bases cargadas en dias distintos pueden diferir, porque FBref
+  `pg_dump`. Dos bases cargadas en dias distintos pueden diferir, porque las fuentes
   corrige datos a posteriori.
 - **El planificador debe correr en un solo equipo.** El candado sobre
   `etl_run` vive en la base de datos y no protege entre maquinas: dos
-  planificadores activos scrapearian FBref el doble sin traer nada nuevo.
+  planificadores activos consultarian las fuentes el doble sin traer nada nuevo.
 
 - API: <http://localhost:8000/docs>
 - Interfaz: <http://localhost:8501>
@@ -444,8 +584,26 @@ Para trabajar sobre el ETL hace falta el extra `etl` del backend, que arrastra
 
 ## Estado
 
-Pasos 1 a 5 completados: infraestructura, esquema de datos, ETL, capa de
-analisis, API e interfaz. Queda el paso 6, opcional: el chat con Ollama.
+Pasos 1 a 5 completados y **ejecutados contra datos reales**: infraestructura,
+esquema, ETL, analisis, API e interfaz, con las cinco grandes ligas de la
+temporada 2026/27 cargadas desde Understat y, para LaLiga, la ficha, el valor de
+mercado y la carrera de 356 futbolistas desde Transfermarkt. Queda el paso 6, opcional:
+el chat con Ollama.
 
-Nada de esto se ha ejecutado todavia contra datos reales: el ETL no se ha
-lanzado nunca y la base de datos esta vacia.
+Lo que la plataforma **no** puede hacer hoy, y conviene saberlo antes de leer un
+perfil:
+
+- **No hay una sola metrica defensiva.** Understat no publica entradas,
+  intercepciones ni despejes, asi que a un central solo se le juzga con balon.
+  Es la limitacion mas seria que arrastra el proyecto.
+- **La posicion concreta esta cargada pero aun no se usa para comparar.**
+  Transfermarkt da "Centre-Back", "Left Winger" o "Central Midfield" donde
+  Understat solo da `DF`, y eso se guarda ya en `player_profile`. Falta el paso
+  siguiente: que la poblacion de referencia pueda ser esa y no el grupo de
+  cuatro letras. Es la mejora con mas recorrido futbolistico que queda
+  pendiente, porque comparar a un central con un lateral es justo lo que hoy
+  distorsiona los percentiles de la defensa.
+- **Los porteros no tienen metricas propias**, y por tanto no tienen grafico.
+- **El ajuste por posesion no se aplica a nada.** La maquinaria existe, pero
+  ninguna metrica de Understat es del tipo que ese ajuste corrige (divide por el
+  tiempo *sin* balon, que es lo que necesita una metrica defensiva).

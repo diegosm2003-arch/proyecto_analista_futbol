@@ -229,3 +229,112 @@ def test_sin_metricas_comunes_la_comparacion_queda_vacia() -> None:
     datos = presentation.prepare_comparison(_perfil(npxg=80.0), _perfil(tackles=50.0), PLANTILLA)
 
     assert len(datos) == 0
+
+
+# --- Metricas extremas ------------------------------------------------------
+
+
+def _con_metricas(metricas: list[dict], poblacion: int = 400) -> dict:
+    return {"population_size": poblacion, "metrics": metricas}
+
+
+def test_un_percentil_alto_con_direccion_es_una_fortaleza() -> None:
+    avisos = presentation.extreme_metrics(
+        _con_metricas(
+            [{"metric": "np_xg", "label": "npxG", "percentile": 96, "higher_is_better": True}]
+        )
+    )
+
+    assert [(a.kind, a.percentile) for a in avisos] == [("fortaleza", 96)]
+
+
+def test_un_percentil_bajo_con_direccion_es_una_debilidad() -> None:
+    avisos = presentation.extreme_metrics(
+        _con_metricas([{"metric": "xa", "label": "xA", "percentile": 4, "higher_is_better": True}])
+    )
+
+    assert avisos[0].kind == "debilidad"
+
+
+def test_una_metrica_de_estilo_extrema_es_un_rasgo_y_no_un_elogio() -> None:
+    # Estar en el percentil 97 de tiros no es ser bueno, es disparar mucho. Si
+    # acierta o no lo dicen las metricas de finalizacion, no esta.
+    avisos = presentation.extreme_metrics(
+        _con_metricas(
+            [{"metric": "shots", "label": "Tiros", "percentile": 97, "higher_is_better": None}]
+        )
+    )
+
+    assert avisos[0].kind == "rasgo"
+
+
+def test_lo_normal_no_genera_aviso() -> None:
+    # Si todo se senalara, no se estaria senalando nada.
+    avisos = presentation.extreme_metrics(
+        _con_metricas(
+            [
+                {"metric": "np_xg", "label": "npxG", "percentile": 62, "higher_is_better": True},
+                {"metric": "xa", "label": "xA", "percentile": 11, "higher_is_better": True},
+            ]
+        )
+    )
+
+    assert avisos == []
+
+
+def test_una_metrica_sin_percentil_no_se_inventa() -> None:
+    avisos = presentation.extreme_metrics(
+        _con_metricas(
+            [{"metric": "np_xg", "label": "npxG", "percentile": None, "higher_is_better": True}]
+        )
+    )
+
+    assert avisos == []
+
+
+def test_lo_mas_extremo_se_senala_primero() -> None:
+    avisos = presentation.extreme_metrics(
+        _con_metricas(
+            [
+                {"metric": "a", "label": "A", "percentile": 91, "higher_is_better": True},
+                {"metric": "b", "label": "B", "percentile": 1, "higher_is_better": True},
+                {"metric": "c", "label": "C", "percentile": 96, "higher_is_better": True},
+            ]
+        )
+    )
+
+    # Un percentil 1 se sale mas de lo normal que un 96, aunque sea por abajo:
+    # lo extremo es la distancia a la mediana, no el lado.
+    assert [a.metric for a in avisos] == ["b", "c", "a"]
+
+
+def test_una_metrica_de_posesion_avisa_de_que_mide_al_equipo() -> None:
+    # Caso real de nuestros datos: en xGBuildup los centrales del Barcelona
+    # salen entre los mejores de la liga. No construyen mejor que nadie: su
+    # equipo tiene el balon.
+    avisos = presentation.extreme_metrics(
+        _con_metricas(
+            [
+                {
+                    "metric": "xg_buildup",
+                    "label": "xGBuildup",
+                    "percentile": 98,
+                    "higher_is_better": True,
+                    "team_dependent": True,
+                }
+            ]
+        )
+    )
+
+    assert "equipo dominante" in avisos[0].note
+
+
+def test_con_poblacion_pequena_se_avisa_de_que_el_percentil_es_fragil() -> None:
+    avisos = presentation.extreme_metrics(
+        _con_metricas(
+            [{"metric": "np_xg", "label": "npxG", "percentile": 97, "higher_is_better": True}],
+            poblacion=12,
+        )
+    )
+
+    assert "poblacion" in avisos[0].note

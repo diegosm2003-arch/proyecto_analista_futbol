@@ -191,6 +191,112 @@ def summarise_profile(profile: dict[str, Any]) -> str:
     return "Destaca en " + " y en ".join(partes) + "."
 
 
+# Percentiles a partir de los cuales una metrica merece que se la senale. El 90
+# y el 10 no son arbitrarios: es el uno de cada diez por arriba y por abajo, el
+# corte con el que se habla de un jugador en un informe de scouting.
+HIGH_PERCENTILE = 90
+LOW_PERCENTILE = 10
+
+# Cuantos avisos se ensenan como mucho.
+MAX_ALERTS = 6
+
+# Por debajo de esta poblacion el percentil se mueve demasiado con cada jugador
+# que entra o sale como para construir un aviso sobre el.
+FRAGILE_POPULATION = 50
+
+
+@dataclass(frozen=True, slots=True)
+class Alert:
+    """Una metrica lo bastante extrema como para senalarla."""
+
+    metric: str
+    label: str
+    percentile: int
+    # "fortaleza", "debilidad" o "rasgo".
+    kind: str
+    # Como hay que leer el dato. Vacio cuando no hay nada que matizar.
+    note: str = ""
+
+    @property
+    def text(self) -> str:
+        return f"{self.label}: percentil {self.percentile}"
+
+
+def extreme_metrics(
+    profile: dict[str, Any],
+    high: int = HIGH_PERCENTILE,
+    low: int = LOW_PERCENTILE,
+) -> list[Alert]:
+    """Metricas en las que el jugador se sale de lo normal, con su lectura.
+
+    Un pizza chart con doce ejes ensena mucho a la vez y no dice donde mirar.
+    Esto responde a la pregunta que se hace un analista delante del grafico: que
+    tiene este jugador de verdaderamente distinto.
+
+    **Un extremo no siempre es bueno ni malo.** Se separan tres casos:
+
+    - Metricas con direccion (`higher_is_better`): el percentil ya viene
+      invertido donde menos es mejor, asi que arriba es fortaleza y abajo,
+      debilidad.
+    - Metricas de estilo, sin direccion: un percentil 97 en tiros no es un
+      elogio, es un perfil de jugador que dispara mucho. Se marca como rasgo, y
+      si acierta o no lo dicen las metricas de finalizacion, no esta.
+
+    **Dos matices que evitan leer de mas.** Las metricas que el catalogo marca
+    como dependientes del equipo miden al conjunto tanto como al jugador: en
+    xGBuildup los centrales del Barcelona salen entre los mejores de la liga, y
+    no es que construyan mejor que nadie, es que su equipo tiene el balon. Y con
+    una poblacion pequena el percentil entero es fragil, asi que se avisa en
+    todos los avisos en lugar de fingir precision.
+    """
+    poblacion_fragil = profile.get("population_size", 0) < FRAGILE_POPULATION
+
+    avisos = []
+    for metrica in profile.get("metrics", []):
+        percentil = metrica.get("percentile")
+        if percentil is None:
+            continue
+        percentil = int(round(percentil))
+        if not (percentil >= high or percentil <= low):
+            continue
+
+        # Sin direccion la metrica es de estilo: describe al jugador, no lo
+        # califica.
+        direccion = metrica.get("higher_is_better")
+        arriba = "fortaleza" if percentil >= high else "debilidad"
+        tipo = "rasgo" if direccion is None else arriba
+
+        avisos.append(
+            Alert(
+                metric=metrica.get("metric", ""),
+                label=metrica.get("label", metrica.get("metric", "")),
+                percentile=percentil,
+                kind=tipo,
+                note=_nota(metrica, poblacion_fragil),
+            )
+        )
+
+    # Lo mas extremo primero: es el orden en que se miraria en un informe. Y se
+    # corta ahi porque las metricas de ataque estan muy correlacionadas entre
+    # si: un delantero en forma se sale en npxG, en goles y en tiros a la vez, y
+    # listar las nueve diria tres veces lo mismo y taparia lo demas.
+    ordenados = sorted(avisos, key=lambda a: abs(a.percentile - 50), reverse=True)
+    return ordenados[:MAX_ALERTS]
+
+
+def _nota(metrica: dict[str, Any], poblacion_fragil: bool) -> str:
+    """Como hay que leer un percentil extremo de esta metrica."""
+    notas = []
+    if metrica.get("team_dependent"):
+        notas.append(
+            "cuenta posesiones, asi que premia jugar en un equipo dominante: "
+            "mide al conjunto tanto como al jugador"
+        )
+    if poblacion_fragil:
+        notas.append("la poblacion de comparacion es pequena y el percentil se mueve facil")
+    return "; ".join(notas)
+
+
 def chart_filename(*partes: str, extension: str = "png") -> str:
     """Nombre de fichero para un grafico descargado.
 

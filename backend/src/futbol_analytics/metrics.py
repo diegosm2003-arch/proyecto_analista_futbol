@@ -66,6 +66,10 @@ class Metric:
             tiene menos ocasiones de entrar que uno de un equipo replegado, asi
             que su valor por 90 mide al equipo tanto como al jugador. Estas
             metricas se ofrecen tambien ajustadas por posesion.
+        team_dependent: Si la metrica premia jugar en un equipo dominante. Es lo
+            contrario del caso anterior y no se corrige con el mismo ajuste: no
+            sube al defender menos, sube al tener mas el balon. No hay ajuste
+            que la arregle, asi que se marca para poder avisar al leerla.
     """
 
     name: str
@@ -79,6 +83,7 @@ class Metric:
     required: bool = True
     source: str = "fbref"
     possession_sensitive: bool = False
+    team_dependent: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -120,19 +125,28 @@ PLAYER_METRICS: tuple[Metric, ...] = (
     # xGChain reparte el xG de una jugada entre todos los que la tocaron: mide
     # estar en las posesiones que acaban en tiro, se remate o no.
     Metric("xg_chain", "player_season", "xg_chain", "xGChain",
-           positions=OUTFIELD, source="understat"),
+           positions=OUTFIELD, source="understat", team_dependent=True),
     # xGBuildup es xGChain quitando el tiro y la asistencia. Aisla a quien
     # construye sin finalizar, que es el perfil que ninguna estadistica de
     # conteo refleja: el central que saca el balon o el pivote que hace de
     # bisagra no aparecen en goles ni en asistencias.
+    # Marcadas como dependientes del equipo: cuentan posesiones, y un equipo que
+    # tiene el balon genera mas para todos los suyos. En nuestros datos, tras De
+    # Jong y Pedri, los siguientes en xGBuildup son la defensa del Barcelona
+    # entera. No es que construyan mejor que nadie.
     Metric("xg_buildup", "player_season", "xg_buildup", "xGBuildup",
-           positions=OUTFIELD, source="understat"),
+           positions=OUTFIELD, source="understat", team_dependent=True),
 
-    # --- Disciplina.
+    # --- Disciplina. Sin direccion a proposito: describen como compite un
+    # jugador, no lo bueno que es. Dar por mejor al que menos tarjetas ve
+    # premiaria al pivote que no hace la falta tactica y al central que no sale
+    # a cortar. Con direccion, el aviso de percentiles extremos llegaba a
+    # presentar "pocas amarillas" como una fortaleza de Pedri, por delante de
+    # sus pases clave.
     Metric("yellow_cards", "player_season", "yellow_cards", "Tarjetas amarillas",
-           higher_is_better=False, source="understat"),
+           higher_is_better=None, source="understat"),
     Metric("red_cards", "player_season", "red_cards", "Tarjetas rojas",
-           higher_is_better=False, source="understat"),
+           higher_is_better=None, source="understat"),
 )
 # fmt: on
 

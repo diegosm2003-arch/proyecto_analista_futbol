@@ -134,6 +134,23 @@ services:
         condition: service_healthy
     command: ["python", "-m", "futbol_analytics.etl.scheduler"]
 
+  transfermarkt-api:
+    # Envoltorio open source (MIT) sobre Transfermarkt, que no publica API.
+    # Se construye desde su repositorio: no hay imagen oficial publicada.
+    build: https://github.com/felipeall/transfermarkt-api.git
+    image: transfermarkt-api:latest
+    container_name: futbol-transfermarkt-api
+    profiles: ["transfermarkt"]
+    restart: unless-stopped
+    environment:
+      # El propio servicio limita su ritmo contra Transfermarkt. Se deja
+      # activado: scrapear una web ajena sin freno es la forma mas rapida de
+      # que te bloqueen y de merecerlo.
+      RATE_LIMITING_ENABLE: "true"
+      RATE_LIMITING_FREQUENCY: 2/3seconds
+    # Sin puerto publicado: solo lo consume el ETL por nombre de servicio. Para
+    # depurar su Swagger, levantarlo con `--service-ports`.
+
   ollama:
     image: ollama/ollama:latest
     container_name: futbol-ollama

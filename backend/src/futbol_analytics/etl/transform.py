@@ -182,6 +182,11 @@ def add_identity(frame: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
         position_raw = pd.Series(index=flat.index, dtype=object)
     result["position_raw"] = position_raw
     result["position_group"] = position_raw.map(primary_position)
+    # El identificador de la fuente viaja con la fila: sin el, cruzar con
+    # Transfermarkt u otra fuente exigiria adivinar por nombre.
+    result["understat_id"] = (
+        flat["player_id"].astype("string") if "player_id" in flat.columns else None
+    )
     result["nation"] = flat["nation"].map(parse_nation) if "nation" in flat.columns else None
     result["age"] = flat["age"].map(parse_age) if "age" in flat.columns else None
     result["born"] = (

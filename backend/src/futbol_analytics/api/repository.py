@@ -15,7 +15,14 @@ import pandas as pd
 from sqlalchemy import Engine, distinct, func, select
 
 from futbol_analytics.db import create_schema
-from futbol_analytics.db.schema import etl_run, player_season, team_season
+from futbol_analytics.db.schema import (
+    etl_run,
+    player_market_value,
+    player_profile,
+    player_season,
+    player_transfers,
+    team_season,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +58,9 @@ class DataAccess(Protocol):
 
     def last_runs(self, limit: int) -> list[dict]:
         """Ultimas ejecuciones del ETL, de la mas reciente a la mas antigua."""
+
+    def market(self, understat_id: str) -> dict:
+        """Ficha, valor de mercado y carrera de un jugador en Transfermarkt."""
 
 
 class SqlDataAccess:
@@ -113,6 +123,32 @@ class SqlDataAccess:
         with self._engine.connect() as conexion:
             filas = conexion.execute(consulta).mappings().all()
         return [dict(fila) for fila in filas]
+
+    def market(self, understat_id: str) -> dict:
+        """Ficha, valor de mercado y carrera de un jugador.
+
+        Va por `understat_id` y no por nombre porque es el unico identificador
+        estable entre las dos fuentes: el nombre se escribe distinto en cada una
+        y hay homonimos.
+        """
+        ficha = select(player_profile).where(player_profile.c.understat_id == understat_id)
+        valores = (
+            select(player_market_value)
+            .where(player_market_value.c.understat_id == understat_id)
+            .order_by(player_market_value.c.valuation_date)
+        )
+        carrera = (
+            select(player_transfers)
+            .where(player_transfers.c.understat_id == understat_id)
+            .order_by(player_transfers.c.transfer_date)
+        )
+        with self._engine.connect() as conexion:
+            fila = conexion.execute(ficha).mappings().first()
+            return {
+                "profile": dict(fila) if fila else None,
+                "market_value": [dict(f) for f in conexion.execute(valores).mappings()],
+                "transfers": [dict(f) for f in conexion.execute(carrera).mappings()],
+            }
 
     def _read(self, consulta) -> pd.DataFrame:
         with self._engine.connect() as conexion:

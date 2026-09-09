@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -59,7 +59,9 @@ def run(
             player_rows=0 if players is None else len(players),
             team_rows=0 if teams is None else len(teams),
         )
-        logger.info("Simulacion terminada, no se ha escrito nada", extra=result.__dict__)
+        # asdict y no __dict__: el dataclass usa slots, asi que no tiene __dict__ y
+        # la simulacion terminaba siempre con AttributeError.
+        logger.info("Simulacion terminada, no se ha escrito nada", extra=asdict(result))
         return result
 
     engine = get_engine()

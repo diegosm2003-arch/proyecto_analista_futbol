@@ -53,20 +53,32 @@ def build_upsert(table: Table, rows: Sequence[dict]) -> Insert:
     # parcial no borra columnas que rellena otro proceso: en concreto
     # `detailed_position`, que asignara el clustering de roles de la fase 3.
     present = {name for row in rows for name in row}
+    # Cada tabla llama de una forma a su marca de tiempo: las del ETL usan
+    # `updated_at` y las de fuentes externas `scraped_at`. Se detecta en lugar
+    # de fijarla, porque fijarla rompia el upsert en cuanto se anadio una tabla
+    # con la otra convencion.
+    marcas = {"updated_at", "scraped_at"}
+    columnas = {column.name for column in table.columns}
+    marca_de_tiempo = next(
+        (nombre for nombre in ("updated_at", "scraped_at") if nombre in columnas), None
+    )
+
     updatable = [
         column.name
         for column in table.columns
-        if column.name not in key_columns and column.name in present and column.name != "updated_at"
+        if column.name not in key_columns and column.name in present and column.name not in marcas
     ]
 
     statement = pg_insert(table).values(list(rows))
+    actualizacion = {name: statement.excluded[name] for name in updatable}
+    if marca_de_tiempo is not None:
+        # Deja constancia de cuando se refresco la fila, aunque el resto no
+        # cambie: sin eso no se puede saber si un dato esta al dia.
+        actualizacion[marca_de_tiempo] = func.now()
+
     return statement.on_conflict_do_update(
         index_elements=sorted(key_columns),
-        set_={
-            **{name: statement.excluded[name] for name in updatable},
-            # Marca cuando se refresco la fila, aunque el resto no cambie.
-            "updated_at": func.now(),
-        },
+        set_=actualizacion,
     )
 
 
