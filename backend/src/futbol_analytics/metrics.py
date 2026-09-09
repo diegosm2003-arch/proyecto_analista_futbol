@@ -16,6 +16,13 @@ Dos reglas de diseno:
 
 El campo `column` es el nombre de la columna de FBref ya aplanado por
 `etl.transform.flatten_columns` (grupo + estadistico, en snake_case).
+
+**Metricas marcadas como opcionales.** Comprobado contra FBref el 9/9/2026 para
+LaLiga 2024/25 y 2025/26: la pagina `standard` no publica el grupo de xG ni el
+de progresion, y `misc` no trae duelos aereos ni recuperaciones. No es un fallo
+de nombres: esas columnas no estan en el HTML. Se dejan en el catalogo porque el
+hueco natural es Understat, que si publica xG, npxG y xA, y porque FBref podria
+recuperarlas. Mientras tanto quedan a NULL en lugar de matar la carga.
 """
 
 from __future__ import annotations
@@ -92,18 +99,19 @@ PLAYER_METRICS: tuple[Metric, ...] = (
     Metric("assists", "standard", "performance_ast", "Asistencias", positions=OUTFIELD),
     # npxG separa el merito del juego del merito de tirar penaltis, que dice mas
     # de quien es el designado que del rendimiento del jugador.
-    Metric("npxg", "standard", "expected_npxg", "xG sin penaltis", positions=OUTFIELD),
-    Metric("xg", "standard", "expected_xg", "xG", positions=OUTFIELD),
+    Metric("npxg", "standard", "expected_npxg", "xG sin penaltis",
+           positions=OUTFIELD, required=False),
+    Metric("xg", "standard", "expected_xg", "xG", positions=OUTFIELD, required=False),
     Metric("xag", "standard", "expected_xag", "xAG (goles esperados asistidos)",
-           positions=OUTFIELD),
+           positions=OUTFIELD, required=False),
 
     # --- Progresion: mover el balon hacia la porteria rival.
     Metric("progressive_carries", "standard", "progression_prgc",
-           "Conducciones progresivas", positions=OUTFIELD),
+           "Conducciones progresivas", positions=OUTFIELD, required=False),
     Metric("progressive_passes", "standard", "progression_prgp",
-           "Pases progresivos", positions=OUTFIELD),
+           "Pases progresivos", positions=OUTFIELD, required=False),
     Metric("progressive_passes_received", "standard", "progression_prgr",
-           "Pases progresivos recibidos", positions=OUTFIELD),
+           "Pases progresivos recibidos", positions=OUTFIELD, required=False),
 
     # --- Tiro.
     Metric("shots", "shooting", "standard_sh", "Tiros", positions=OUTFIELD),
@@ -111,7 +119,7 @@ PLAYER_METRICS: tuple[Metric, ...] = (
            positions=OUTFIELD),
     # La distancia media de tiro no es mejor alta ni baja: describe el perfil.
     Metric("avg_shot_distance", "shooting", "standard_dist", "Distancia media de tiro",
-           positions=OUTFIELD, higher_is_better=None, per90=False),
+           positions=OUTFIELD, higher_is_better=None, per90=False, required=False),
 
     # --- Pase.
     Metric("passes_completed", "passing", "total_cmp", "Pases completados",
@@ -128,7 +136,7 @@ PLAYER_METRICS: tuple[Metric, ...] = (
     Metric("crosses_into_penalty_area", "passing", "crspa", "Centros al area",
            positions=OUTFIELD),
     Metric("xa", "passing", "expected_xa", "xA (asistencias esperadas)",
-           positions=OUTFIELD),
+           positions=OUTFIELD, required=False),
 
     # --- Creacion: acciones que terminan en tiro o en gol.
     Metric("shot_creating_actions", "goal_shot_creation", "sca_sca",
@@ -188,17 +196,17 @@ PLAYER_METRICS: tuple[Metric, ...] = (
            "Conducciones al ultimo tercio", positions=OUTFIELD),
     Metric("carries_into_penalty_area", "possession", "carries_cpa",
            "Conducciones al area", positions=OUTFIELD),
-    Metric("passes_received", "possession", "receiving_rec", "Pases recibidos",
+    Metric("passes_received", "possession", "rec", "Pases recibidos",
            positions=OUTFIELD, higher_is_better=None),
 
     # --- Duelos y recuperaciones. Los duelos aereos NO se marcan como sensibles
     #     a la posesion: dependen sobre todo de si el rival juega en largo, que
     #     es otra cosa distinta a cuanto balon tiene el equipo propio.
-    Metric("aerials_won", "misc", "aerial_duels_won", "Duelos aereos ganados"),
+    Metric("aerials_won", "misc", "aerial_duels_won", "Duelos aereos ganados", required=False),
     Metric("aerials_lost", "misc", "aerial_duels_lost", "Duelos aereos perdidos",
-           higher_is_better=None),
+           higher_is_better=None, required=False),
     Metric("ball_recoveries", "misc", "performance_recov", "Recuperaciones",
-           higher_is_better=None, possession_sensitive=True),
+           higher_is_better=None, possession_sensitive=True, required=False),
     Metric("fouls_committed", "misc", "performance_fls", "Faltas cometidas",
            higher_is_better=False),
 

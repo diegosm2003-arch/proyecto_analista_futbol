@@ -17,6 +17,7 @@ from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from futbol_analytics.config import BIG_5_LEAGUES, get_settings
+from futbol_analytics.etl import fbref_pages
 from futbol_analytics.seasons import current_season
 
 if TYPE_CHECKING:
@@ -117,10 +118,15 @@ def read_player_stats(
     )
     reader = _fbref(leagues or settings.leagues, temporadas, no_cache=no_cache)
 
+    ligas = leagues or settings.leagues
     frames: dict[str, pd.DataFrame] = {}
     for stat_type in stat_types:
         logger.info("Descargando tabla de jugadores", extra={"stat_type": stat_type})
-        frames[stat_type] = reader.read_player_season_stats(stat_type=stat_type)
+        # Se leen las paginas propias de cada tabla y no la de la competicion:
+        # esa solo trae cinco tablas de equipo, sin pases progresivos, toques
+        # por zona ni entradas por tercio, que es justo lo que hace falta para
+        # analizar futbol y no solo contar goles.
+        frames[stat_type] = fbref_pages.read_stat_type(reader, ligas, temporadas, stat_type)
         logger.info(
             "Tabla descargada",
             extra={"stat_type": stat_type, "filas": len(frames[stat_type])},
