@@ -572,3 +572,14 @@ def test_la_carrera_y_el_valor_llegan_al_cliente(
     # Un valor por debajo del maximo no es un fallo del dato, es una carrera: se
     # explica en lugar de dejar que el usuario lo lea como un error.
     assert any("maximo" in aviso for aviso in cuerpo["caveats"])
+
+
+def test_el_catalogo_publica_el_umbral_que_se_aplica_de_verdad(client: TestClient) -> None:
+    # El configurado y el aplicado no son lo mismo cuando la temporada acaba de
+    # empezar. La interfaz anunciaba el configurado y decia "solo entran los
+    # jugadores con al menos 450 minutos" mientras comparaba a partir de 135.
+    catalogo = client.get("/meta/catalog").json()
+
+    assert set(catalogo["min_minutes_applied"]) == set(catalogo["seasons"])
+    for temporada, umbral in catalogo["min_minutes_applied"].items():
+        assert 0 < umbral <= catalogo["min_minutes"], temporada

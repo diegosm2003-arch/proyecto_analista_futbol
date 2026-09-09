@@ -9,7 +9,7 @@ from __future__ import annotations
 import streamlit as st
 
 from futbol_front.client import ApiError
-from futbol_front.state import get_client
+from futbol_front.state import cached_health
 from futbol_front.views import players, teams
 
 st.set_page_config(
@@ -29,7 +29,7 @@ def _estado_de_los_datos() -> None:
     with st.sidebar:
         st.divider()
         try:
-            estado = get_client().health()
+            estado = cached_health()
         except ApiError as error:
             st.error(f"API no disponible: {error}")
             return
@@ -86,10 +86,25 @@ def _acerca_de() -> None:
     )
 
 
+# La ruta de cada pagina se escribe a mano. Streamlit la deduce del nombre del
+# callable cuando no se le da, y las dos vistas exportan una funcion `render`:
+# dos paginas con la misma ruta, y la aplicacion no arranca. Escribirla ademas
+# fija la URL, que si se dedujera cambiaria al renombrar una funcion.
 paginas = [
-    st.Page(players.render, title="Jugadores", icon=":material/person:", default=True),
-    st.Page(teams.render, title="Estilo de equipo", icon=":material/groups:"),
-    st.Page(_acerca_de, title="Como leerlo", icon=":material/help:"),
+    st.Page(
+        players.render,
+        title="Jugadores",
+        icon=":material/person:",
+        url_path="jugadores",
+        default=True,
+    ),
+    st.Page(
+        teams.render,
+        title="Estilo de equipo",
+        icon=":material/groups:",
+        url_path="equipos",
+    ),
+    st.Page(_acerca_de, title="Como leerlo", icon=":material/help:", url_path="ayuda"),
 ]
 
 # La navegacion se ejecuta primero para que los filtros de cada vista queden

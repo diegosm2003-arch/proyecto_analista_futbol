@@ -97,7 +97,14 @@ class Catalog(BaseModel):
 
     seasons: list[str]
     leagues: list[str]
-    min_minutes: int = Field(description="Umbral para entrar en la poblacion de comparacion")
+    min_minutes: int = Field(description="Umbral configurado, con la temporada completa")
+    min_minutes_applied: dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Umbral que se aplica de verdad en cada temporada. Baja al principio, "
+            "cuando nadie ha jugado lo suficiente para llegar al configurado"
+        ),
+    )
 
 
 class PlayerSummary(BaseModel):

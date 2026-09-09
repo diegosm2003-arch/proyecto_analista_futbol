@@ -13,7 +13,10 @@ license = { text = "MIT" }
 # La interfaz solo habla HTTP con la API: no depende del paquete del backend ni
 # de PostgreSQL. mplsoccer es el estandar para pizza charts estilo FBref.
 dependencies = [
-    "streamlit>=1.37",
+    # Con techo: la 1.63 empezo a exigir rutas de pagina unicas y tumbo la
+    # aplicacion entera en un rebuild, sin que cambiara una linea de codigo.
+    # Una version mayor se sube a mano y se comprueba, no al reconstruir.
+    "streamlit>=1.37,<2",
     "requests>=2.32",
     "pandas>=2.2",
     "matplotlib>=3.9",

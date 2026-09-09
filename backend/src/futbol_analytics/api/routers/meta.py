@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from futbol_analytics.analysis.roles import ARCHETYPES
+from futbol_analytics.api import services
 from futbol_analytics.api.dependencies import DataAccessDep
 from futbol_analytics.api.schemas import (
     Catalog,
@@ -27,10 +28,23 @@ router = APIRouter(prefix="/meta", tags=["catalogo"])
 
 @router.get("/catalog", summary="Temporadas y ligas disponibles")
 def catalog(data: DataAccessDep) -> Catalog:
+    """Que hay cargado y con que umbral se compara.
+
+    El umbral se publica por temporada y no solo el configurado porque no son lo
+    mismo cuando la temporada acaba de empezar: en la jornada 4 nadie llega a
+    450 minutos, asi que baja para que la plataforma no salga vacia. La interfaz
+    anunciaba el configurado y decia "solo entran los jugadores con al menos 450
+    minutos" mientras comparaba a partir de 135.
+    """
+    temporadas = data.seasons()
     return Catalog(
-        seasons=data.seasons(),
+        seasons=temporadas,
         leagues=data.leagues(),
         min_minutes=get_settings().min_minutes,
+        min_minutes_applied={
+            temporada: services.population_context(data, temporada)["min_minutes"]
+            for temporada in temporadas
+        },
     )
 
 

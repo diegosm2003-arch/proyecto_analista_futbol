@@ -121,3 +121,23 @@ def test_si_la_api_no_responde_se_explica(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_una_respuesta_correcta_se_devuelve_deserializada(llamadas: list[dict]) -> None:
     assert ApiClient("http://api:8000").catalog() == {"ok": True}
+
+
+# --- La sonda de version ----------------------------------------------------
+
+
+def test_si_la_api_no_contesta_la_version_no_revienta_la_interfaz(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # La version del dato es la clave de toda la cache. Si /health falla un
+    # momento, propagar el error dejaria en blanco una pantalla cuyos datos ya
+    # estan cacheados; y devolver algo distinto cada vez invalidaria la cache
+    # entera en cada interaccion.
+    from futbol_front import state
+
+    def revienta() -> dict:
+        raise ApiError("API caida")
+
+    monkeypatch.setattr(state, "cached_health", revienta)
+
+    assert state.data_version() == state.UNKNOWN_VERSION

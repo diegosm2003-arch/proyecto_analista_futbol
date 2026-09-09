@@ -186,10 +186,17 @@ def _filtros(catalogo: dict) -> dict:
         liga = st.selectbox("Liga", ["Todas las Big 5", *catalogo["leagues"]])
         posicion = st.selectbox("Posicion", ["Todas", "GK", "DF", "MF", "FW"])
         nombre = st.text_input("Nombre", placeholder="Busqueda parcial")
-        st.caption(
-            f"Solo entran en la comparacion los jugadores con al menos "
-            f"{catalogo['min_minutes']} minutos."
-        )
+        # El umbral real, no el configurado: al principio de temporada baja
+        # para que la plataforma no salga vacia, y anunciar el otro seria
+        # mentir sobre quien esta entrando en la comparacion.
+        umbral = catalogo.get("min_minutes_applied", {}).get(temporada, catalogo["min_minutes"])
+        st.caption(f"Solo entran en la comparacion los jugadores con al menos {umbral} minutos.")
+        if umbral < catalogo["min_minutes"]:
+            st.caption(
+                f":orange[Temporada empezada: el umbral ha bajado desde los "
+                f"{catalogo['min_minutes']} minutos habituales. Con tan pocos "
+                f"partidos, las metricas por 90 son inestables.]"
+            )
 
     return {
         "season": temporada,
