@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     # Por defecto, la temporada en curso. Se calcula en cada arranque en lugar
     # de fijarse a mano para que el proyecto no envejezca solo.
     seasons: Annotated[list[str], NoDecode] = Field(default_factory=lambda: [current_season()])
+    # FBref publica una pagina que combina las cinco grandes ligas. Pedir esa en
+    # lugar de las cinco por separado devuelve exactamente los mismos datos
+    # (soccerdata mapea cada fila a su liga) con una quinta parte de peticiones,
+    # y FBref limita a una cada 7 segundos. Se puede desactivar si algun dia esa
+    # pagina se desincroniza de las individuales.
+    use_combined_big5: bool = True
     # Directorio de cache del scraping (soccerdata). Fuera de Git, en el
     # volumen de datos: sin cache, cada ejecucion vuelve a descargar FBref.
     soccerdata_dir: str = "/app/data/soccerdata"

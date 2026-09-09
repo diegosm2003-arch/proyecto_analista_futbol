@@ -142,6 +142,12 @@ docker compose --profile etl run --rm etl --leagues "ESP-La Liga"
 docker compose --profile etl run --rm etl
 ```
 
+Cuando se piden las cinco grandes ligas, el ETL usa **la pagina que FBref
+publica con las cinco combinadas** en lugar de scrapearlas una a una. Devuelve
+exactamente los mismos datos, porque `soccerdata` reparte cada fila a su liga,
+con una quinta parte de peticiones: a 7 segundos cada una, esa diferencia se
+nota. Se desactiva con `USE_COMBINED_BIG5=false`.
+
 > **Cargar solo LaLiga funciona, pero degrada los percentiles.** La poblacion de
 > referencia son las cinco grandes ligas: con una sola, un lateral se compara
 > contra unos 80 laterales en lugar de contra 400. El ETL avisa por log y la API

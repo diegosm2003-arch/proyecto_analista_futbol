@@ -61,3 +61,53 @@ def test_resolve_cache(
     monkeypatch.setattr("futbol_analytics.etl.extract.current_season", lambda *_a, **_k: "2627")
 
     assert _resolve_cache(temporadas, use_cache) is no_cache_esperado
+
+
+# --- Pagina combinada de las Big 5 ------------------------------------------
+
+
+def test_las_cinco_grandes_se_piden_como_pagina_combinada() -> None:
+    # FBref limita a una peticion cada 7 segundos. La pagina combinada devuelve
+    # los mismos datos (soccerdata reparte cada fila a su liga) con una quinta
+    # parte de peticiones.
+    from futbol_analytics.config import BIG_5_LEAGUES
+    from futbol_analytics.etl.extract import BIG5_COMBINED, resolve_leagues
+
+    assert resolve_leagues(list(BIG_5_LEAGUES)) == [BIG5_COMBINED]
+
+
+def test_una_sola_liga_se_pide_tal_cual() -> None:
+    from futbol_analytics.etl.extract import resolve_leagues
+
+    assert resolve_leagues(["ESP-La Liga"]) == ["ESP-La Liga"]
+
+
+def test_con_cuatro_de_las_cinco_no_se_sustituye() -> None:
+    # No hay pagina combinada de cuatro ligas: sustituir traeria una de mas.
+    from futbol_analytics.config import BIG_5_LEAGUES
+    from futbol_analytics.etl.extract import resolve_leagues
+
+    cuatro = list(BIG_5_LEAGUES)[:4]
+    assert resolve_leagues(cuatro) == cuatro
+
+
+def test_lo_que_no_sean_las_big_5_se_conserva() -> None:
+    from futbol_analytics.config import BIG_5_LEAGUES
+    from futbol_analytics.etl.extract import BIG5_COMBINED, resolve_leagues
+
+    peticion = [*BIG_5_LEAGUES, "POR-Liga Portugal"]
+    assert resolve_leagues(peticion) == [BIG5_COMBINED, "POR-Liga Portugal"]
+
+
+def test_se_puede_desactivar(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Interruptor por si la pagina combinada se desincronizase de las
+    # individuales, que es el unico riesgo de usarla.
+    from futbol_analytics.config import BIG_5_LEAGUES, get_settings
+    from futbol_analytics.etl.extract import resolve_leagues
+
+    monkeypatch.setenv("USE_COMBINED_BIG5", "false")
+    get_settings.cache_clear()
+    try:
+        assert resolve_leagues(list(BIG_5_LEAGUES)) == list(BIG_5_LEAGUES)
+    finally:
+        get_settings.cache_clear()

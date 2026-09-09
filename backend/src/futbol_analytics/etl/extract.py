@@ -16,7 +16,7 @@ import os
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
-from futbol_analytics.config import get_settings
+from futbol_analytics.config import BIG_5_LEAGUES, get_settings
 from futbol_analytics.seasons import current_season
 
 if TYPE_CHECKING:
@@ -38,6 +38,32 @@ def needs_fresh_data(seasons: list[str], today: date | None = None) -> bool:
     return current_season(today) in set(seasons)
 
 
+# Identificador de la pagina que FBref publica con las cinco grandes ligas
+# juntas. soccerdata la reconoce y reparte cada fila a su liga real, asi que el
+# resultado es indistinguible de scrapear las cinco por separado.
+BIG5_COMBINED = "Big 5 European Leagues Combined"
+
+
+def resolve_leagues(leagues: list[str]) -> list[str]:
+    """Sustituye las cinco grandes ligas por la pagina combinada.
+
+    FBref limita a una peticion cada 7 segundos, asi que pedir las cinco por
+    separado multiplica por cinco el tiempo de una carga para obtener los mismos
+    datos. El propio `soccerdata` avisa de ello si se le piden por separado.
+
+    Solo se sustituye si estan las cinco: con cuatro no existe pagina combinada
+    equivalente. Lo que no sean las Big 5 se conserva tal cual.
+    """
+    if not get_settings().use_combined_big5:
+        return leagues
+    if not set(BIG_5_LEAGUES).issubset(leagues):
+        return leagues
+
+    resto = [liga for liga in leagues if liga not in set(BIG_5_LEAGUES)]
+    logger.info("Se usa la pagina combinada de las Big 5", extra={"ligas_extra": resto})
+    return [BIG5_COMBINED, *resto]
+
+
 def _fbref(leagues: list[str], seasons: list[str], *, no_cache: bool) -> Any:
     """Crea el lector de FBref.
 
@@ -55,7 +81,7 @@ def _fbref(leagues: list[str], seasons: list[str], *, no_cache: bool) -> Any:
 
     import soccerdata
 
-    return soccerdata.FBref(leagues=leagues, seasons=seasons, no_cache=no_cache)
+    return soccerdata.FBref(leagues=resolve_leagues(leagues), seasons=seasons, no_cache=no_cache)
 
 
 def _resolve_cache(seasons: list[str], use_cache: bool | None) -> bool:
