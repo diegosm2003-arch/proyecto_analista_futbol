@@ -103,9 +103,11 @@ def main(argv: list[str] | None = None) -> int:
         logger.warning("Carga omitida", extra={"motivo": str(error)})
         return 3
     except Exception:
-        # El traceback ya se registra en pipeline.run; aqui solo se traduce a un
-        # codigo de salida distinto de cero para que Docker lo refleje.
-        logger.error("El ETL ha terminado con error")
+        # Con `logger.exception` y no `logger.error`: el modo --inspect no pasa
+        # por pipeline.run, que es quien registraba la traza, asi que un fallo
+        # ahi dejaba un mensaje sin causa y obligaba a depurar a ciegas. Es
+        # justo el modo que se usa cuando algo va mal.
+        logger.exception("El ETL ha terminado con error")
         return 1
     return 0
 

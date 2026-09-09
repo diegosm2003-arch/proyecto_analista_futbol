@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     # Por defecto, la temporada en curso. Se calcula en cada arranque en lugar
     # de fijarse a mano para que el proyecto no envejezca solo.
     seasons: Annotated[list[str], NoDecode] = Field(default_factory=lambda: [current_season()])
+    # El paso de Cloudflare de soccerdata pulsa la casilla del captcha con
+    # PyAutoGUI, asi que necesita una pantalla de verdad: en modo headless no hay
+    # donde pulsar y la descarga falla con "CAPTCHA detected and could not be
+    # solved". Por eso el navegador NO va headless y el proceso se lanza bajo
+    # `xvfb-run`, que le da una pantalla virtual.
+    browser_headless: bool = False
     # FBref publica una pagina que combina las cinco grandes ligas. Pedir esa en
     # lugar de las cinco por separado devuelve exactamente los mismos datos
     # (soccerdata mapea cada fila a su liga) con una quinta parte de peticiones,
