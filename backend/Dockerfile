@@ -26,7 +26,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 
-RUN pip install -e ".[etl,api,analysis,scheduler]" \
+RUN pip install -e ".[etl,transfermarkt,api,analysis,scheduler]" \
     && useradd --create-home --uid 1000 appuser \
     && mkdir -p /app/data \
     && chown -R appuser /app

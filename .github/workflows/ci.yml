@@ -18,11 +18,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # El backend no instala el extra "etl": soccerdata arrastra el
-          # scraping y los tests no tocan la red. Que su imagen construye se
-          # comprueba en el job "docker".
+          # Se instalan TODOS los extras del backend, incluido "etl". Antes se
+          # dejaba fuera para no traer soccerdata, con el argumento de que los
+          # tests no tocan la red. El argumento confundia instalar con ejecutar:
+          # tres modulos de test importan codigo del ETL, asi que ni siquiera se
+          # podian recolectar y el job llevaba tiempo en rojo por un
+          # ModuleNotFoundError. Un job de tests tiene que instalar lo que los
+          # tests importan; cualquier otra cosa da un verde local y un rojo
+          # aqui.
           - project: backend
-            extras: "[analysis,api,scheduler,dev]"
+            extras: "[analysis,api,scheduler,etl,transfermarkt,dev]"
           - project: frontend
             extras: "[dev]"
     defaults:

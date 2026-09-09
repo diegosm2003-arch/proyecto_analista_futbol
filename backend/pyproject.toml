@@ -30,6 +30,17 @@ etl = [
     "pandas>=2.2",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
+    # `fbref_pages` lo importa directamente para leer las tablas que FBref
+    # esconde en comentarios HTML. Va declarado aunque soccerdata lo arrastre:
+    # depender de la dependencia de otro es como se rompe una instalacion el dia
+    # que ese otro cambia de parser.
+    "lxml>=5.2",
+]
+# Valor de mercado y fichajes. Aparte del extra "etl" porque no comparten nada:
+# esto habla por HTTP con un servicio propio y no necesita el scraping.
+transfermarkt = [
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
     # Cruce de nombres entre fuentes. Su `token_sort_ratio` aguanta bien el
     # orden distinto de nombre y apellidos, que es el caso habitual.
     "rapidfuzz>=3.9",
