@@ -11,12 +11,13 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from futbol_analytics import __version__
 from futbol_analytics.api import cache
-from futbol_analytics.api.dependencies import DataAccessDep
+from futbol_analytics.api.dependencies import DataAccessDep, get_data_access
 from futbol_analytics.api.routers import meta, players, teams
 from futbol_analytics.api.schemas import Health
 from futbol_analytics.logging_config import configure_logging
@@ -36,7 +37,7 @@ Dos reglas que conviene tener presentes al leer las respuestas:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Arranque y parada del servicio.
 
     El logging se configura aqui y no al importar el modulo: importar no debe
@@ -44,9 +45,32 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """
     configure_logging(service="api")
     cache.clear()
+    _preparar_esquema(app)
     logger.info("API arrancada", extra={"version": __version__})
     yield
     logger.info("API detenida")
+
+
+def _preparar_esquema(app: FastAPI) -> None:
+    """Crea las tablas que falten al arrancar.
+
+    Sin esto, una instalacion recien levantada no tiene esquema hasta que
+    alguien lanza el ETL, y cualquier consulta falla. La interfaz saludaba con
+    un error en lugar de decir que no hay datos, que es el peor primer contacto
+    posible.
+
+    El acceso a datos se resuelve respetando `dependency_overrides`, igual que
+    en los endpoints: asi los tests, que lo sustituyen por DataFrames en
+    memoria, no intentan conectar con PostgreSQL al arrancar la aplicacion.
+
+    Si la base no responde se registra y se sigue: el proceso debe levantar
+    igualmente para que `/health` pueda informar de que esta caida.
+    """
+    proveedor = app.dependency_overrides.get(get_data_access, get_data_access)
+    try:
+        proveedor().ensure_schema()
+    except SQLAlchemyError:
+        logger.warning("No se ha podido preparar el esquema: PostgreSQL no responde")
 
 
 app = FastAPI(
@@ -60,6 +84,25 @@ app = FastAPI(
 app.include_router(meta.router)
 app.include_router(players.router)
 app.include_router(teams.router)
+
+
+@app.exception_handler(SQLAlchemyError)
+async def _error_de_base_de_datos(_: Request, error: SQLAlchemyError) -> JSONResponse:
+    """Traduce un fallo de PostgreSQL a un 503 con un mensaje accionable.
+
+    Sin esto sale un 500 opaco, que sugiere un error de programacion cuando lo
+    que pasa es que la base no esta disponible. El 503 dice ademas que hacer.
+    """
+    logger.exception("Error de base de datos")
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": (
+                "La base de datos no esta disponible. Comprueba que el servicio "
+                "postgres esta levantado."
+            )
+        },
+    )
 
 
 @app.get("/health", tags=["infra"], summary="Comprobacion de vida")

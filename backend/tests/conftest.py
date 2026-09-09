@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from futbol_analytics.api import cache
 from futbol_analytics.api.dependencies import get_data_access
 from futbol_analytics.api.main import app
+from futbol_analytics.api.repository import NO_DATA_VERSION
 
 
 @pytest.fixture
@@ -62,8 +63,12 @@ class FakeDataAccess:
         self._version = version
         self._runs = runs if runs is not None else [_ejecucion_correcta()]
 
+    def ensure_schema(self) -> None:
+        """No hay esquema que crear: los datos viven en DataFrames."""
+
     def version(self) -> str:
-        return self._version
+        # Sin cargas correctas, igual que el repositorio real.
+        return self._version if self._runs else NO_DATA_VERSION
 
     def seasons(self) -> list[str]:
         return sorted(self._players["season"].unique())

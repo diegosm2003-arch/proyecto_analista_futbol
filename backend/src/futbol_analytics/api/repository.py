@@ -14,6 +14,7 @@ from typing import Protocol
 import pandas as pd
 from sqlalchemy import Engine, distinct, func, select
 
+from futbol_analytics.db import create_schema
 from futbol_analytics.db.schema import etl_run, player_season, team_season
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,9 @@ class DataAccess(Protocol):
     Es un Protocol y no una clase concreta para que los tests puedan inyectar
     DataFrames sin levantar PostgreSQL.
     """
+
+    def ensure_schema(self) -> None:
+        """Crea las tablas que falten."""
 
     def version(self) -> str:
         """Identificador de la ultima carga correcta del ETL."""
@@ -54,6 +58,15 @@ class SqlDataAccess:
 
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
+
+    def ensure_schema(self) -> None:
+        """Crea las tablas que falten.
+
+        Sin esto, una instalacion recien levantada no tiene esquema hasta que
+        alguien lanza el ETL, y cualquier consulta falla con un error opaco. Es
+        idempotente: arrancar mil veces no cambia nada.
+        """
+        create_schema(self._engine)
 
     def version(self) -> str:
         """Marca de tiempo de la ultima carga correcta.

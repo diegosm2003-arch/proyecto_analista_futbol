@@ -433,3 +433,35 @@ def test_una_carga_fallida_se_ve_en_health(
     # el estado aparte.
     assert salud["data_version"] == "v1"
     assert historial[0]["error"] == "FBref no responde"
+
+
+# --- Instalacion recien levantada -------------------------------------------
+
+
+def test_una_instalacion_vacia_responde_sin_datos_en_lugar_de_fallar(
+    equipos: pd.DataFrame,
+    jugadores: pd.DataFrame,
+) -> None:
+    # Con la base recien creada, el catalogo devolvia un 500 y la interfaz
+    # saludaba con un error en vez de decir que hay que lanzar el ETL. Es el
+    # primer contacto de quien clona el repositorio.
+    from futbol_analytics.api import cache
+    from futbol_analytics.api.dependencies import get_data_access
+    from futbol_analytics.api.main import app
+    from tests.conftest import FakeDataAccess
+
+    vacio = FakeDataAccess(jugadores.iloc[0:0], equipos.iloc[0:0], runs=[])
+    cache.clear()
+    app.dependency_overrides[get_data_access] = lambda: vacio
+    try:
+        with TestClient(app) as cliente:
+            catalogo = cliente.get("/meta/catalog")
+            salud = cliente.get("/health").json()
+    finally:
+        app.dependency_overrides.clear()
+        cache.clear()
+
+    assert catalogo.status_code == 200
+    assert catalogo.json()["seasons"] == []
+    assert salud["data_version"] == "sin-datos"
+    assert salud["last_etl_status"] is None
