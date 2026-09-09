@@ -43,15 +43,29 @@ def styles(
 
 
 def _style(fila: pd.Series) -> TeamStyle:
+    """Un equipo con su estilo y los rasgos que lo situan en el mapa.
+
+    Los nombres vienen del clustering, que es quien sabe que se puede medir con
+    esta fuente. Antes se pedian `possession` y `pressing_height`, que eran
+    conceptos de FBref: al cambiar a Understat esas columnas dejaron de existir,
+    la API devolvia nulos y el mapa de estilos no se ha podido dibujar desde
+    entonces, sin ningun error de por medio.
+
+    La PPDA se deshace la inversion que el clustering le aplica para poder
+    ensenarla como se publica: un numero que va en un eje tiene que leerse igual
+    que en cualquier otra fuente.
+    """
+    presion = _numero(fila.get("pressing"))
     return TeamStyle(
         league=fila["league"],
         season=fila["season"],
         team=fila["team"],
         style=fila["style"],
         cluster=int(fila["cluster"]),
-        possession=_numero(fila.get("possession")),
-        ppda=_numero(fila.get("ppda")),
-        pressing_height=_numero(fila.get("pressing_height")),
+        ppda=None if presion is None else -presion,
+        territory=_numero(fila.get("territory")),
+        chance_creation=_numero(fila.get("chance_creation")),
+        chance_prevention=_numero(fila.get("chance_prevention")),
     )
 
 

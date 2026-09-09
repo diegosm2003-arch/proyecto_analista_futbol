@@ -137,7 +137,7 @@ class StyleMapData:
     """Puntos del mapa de estilos de equipo."""
 
     teams: list[str]
-    possession: list[float]
+    territory: list[float]
     ppda: list[float]
     styles: list[str]
     clusters: list[int]
@@ -147,26 +147,34 @@ class StyleMapData:
 
 
 def prepare_style_map(report: dict[str, Any]) -> StyleMapData:
-    """Extrae los equipos con posesion y presion conocidas.
+    """Ordena los equipos para el mapa de estilos.
 
-    Un equipo al que le falte alguno de los dos ejes se descarta en lugar de
-    pintarse en el cero: colocarlo en una esquina del mapa afirmaria que no
-    presiona nada, que es una lectura distinta de "no lo sabemos".
+    Los ejes son **territorio y presion**, no posesion y presion. Understat no
+    publica posesion, asi que ese eje no existe; los dos que se usan salen de
+    datos reales: llegadas a zona de remate por partido, que dice cuanto campo
+    pisa un equipo de verdad, y PPDA, que dice como de arriba defiende.
+
+    Es ademas un plano mejor que el clasico de posesion: tener el balon y pisar
+    el campo rival no son lo mismo, y hay equipos que acumulan pases lejos del
+    area.
     """
-    equipos, posesion, ppda, estilos, clusters = [], [], [], [], []
-
-    for equipo in report.get("teams", []):
-        if equipo.get("possession") is None or equipo.get("ppda") is None:
-            logger.info("Equipo sin ejes completos", extra={"equipo": equipo.get("team")})
+    equipos, territorio, ppda, clusters, estilos = [], [], [], [], []
+    for fila in report.get("teams", []):
+        x, y = fila.get("territory"), fila.get("ppda")
+        if x is None or y is None:
             continue
-        equipos.append(equipo["team"])
-        posesion.append(float(equipo["possession"]))
-        ppda.append(float(equipo["ppda"]))
-        estilos.append(equipo.get("style", "sin estilo"))
-        clusters.append(int(equipo.get("cluster", 0)))
+        equipos.append(fila["team"])
+        territorio.append(float(x))
+        ppda.append(float(y))
+        clusters.append(int(fila["cluster"]))
+        estilos.append(fila["style"])
 
     return StyleMapData(
-        teams=equipos, possession=posesion, ppda=ppda, styles=estilos, clusters=clusters
+        teams=equipos,
+        territory=territorio,
+        ppda=ppda,
+        clusters=clusters,
+        styles=estilos,
     )
 
 

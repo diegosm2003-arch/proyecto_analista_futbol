@@ -3,6 +3,17 @@
 El pizza chart usa `mplsoccer`, que es la libreria estandar en football
 analytics y produce el mismo lenguaje visual que los graficos de FBref: quien
 los conozca no tiene que aprender a leerlos.
+
+**Todos los graficos aceptan la paleta de la liga.** El fondo es oscuro y el
+acento cambia con la competicion, para que el grafico no desentone con la
+pantalla en la que vive. Las categorias mantienen su color en todas las ligas:
+son la clave de lectura del grafico y cambiarlas obligaria a releer la leyenda
+cada vez.
+
+**Los tamanos son deliberadamente contenidos.** Un pizza chart a pantalla
+completa obliga a bajar para ver la tabla y los jugadores parecidos, y en una
+herramienta de scouting lo que importa es tener el perfil, el contexto y los
+comparables a la vez.
 """
 
 from __future__ import annotations
@@ -14,33 +25,41 @@ from matplotlib.figure import Figure
 from mplsoccer import PyPizza
 
 from futbol_front.presentation import ComparisonData, PizzaData, StyleMapData
+from futbol_front.theme import DEFAULT, Palette
 
 # Categorias tal y como las sirve la API en /meta/templates. Se repiten aqui en
 # lugar de importarlas del backend: la taxonomia es suya, la paleta es de la
 # interfaz. Si el backend anadiera una categoria nueva, sus porciones saldrian
 # en gris en lugar de romper el grafico.
-ATTACK, POSSESSION, DEFENCE = "Ataque", "Posesion", "Defensa"
+#
+# No son ataque / posesion / defensa como en FBref porque no medimos defensa.
+# Estas tres separan tres formas distintas de aportar al ataque que una cifra
+# de goles y asistencias confunde en una sola.
+FINISHING, CREATION, BUILDUP = "Finalizacion", "Creacion", "Construccion"
 
-# Un color por categoria. Se distinguen bien en pantalla y tambien impresos en
-# gris, que importa si el grafico acaba en un post o en una presentacion.
+# Un color por categoria, constante entre ligas. Se distinguen bien en pantalla
+# y tambien impresos en gris, que importa si el grafico acaba en un post.
 CATEGORY_COLORS = {
-    ATTACK: "#D9455F",
-    POSSESSION: "#3C7DC4",
-    DEFENCE: "#4F9D69",
+    FINISHING: "#FF5C7A",
+    CREATION: "#4C8DFF",
+    BUILDUP: "#3ED598",
 }
+UNKNOWN_CATEGORY = "#8A93A6"
 
-# Colores de los dos jugadores en la comparacion. No se usan los de categoria
-# porque aqui lo que hay que distinguir es quien es quien, no en que fase del
-# juego aporta: la categoria ya la da la posicion de la porcion.
-COMPARE_A = "#1F4E79"
-COMPARE_B = "#E07B39"
+# Fondo y tinta de los graficos. Coinciden con el tema oscuro de la interfaz.
+BACKGROUND = "#161D2B"
+TEXT = "#E9EDF5"
+TEXT_MUTED = "#8D9AB4"
+GRID = "#2A344A"
 
-BACKGROUND = "#F5F5F0"
-TEXT = "#1B1B1B"
-GRID = "#D8D8D2"
+# Tamanos. El pizza cabe junto a su panel de detalle sin obligar a bajar.
+PIZZA_SIZE = (5.4, 5.8)
+COMPARE_SIZE = (6.0, 6.4)
+MAP_SIZE = (7.2, 4.8)
+SMALL_SIZE = (5.2, 3.2)
 
 
-def pizza(data: PizzaData, title: str, subtitle: str) -> Figure:
+def pizza(data: PizzaData, title: str, subtitle: str, palette: Palette = DEFAULT) -> Figure:
     """Dibuja el pizza chart de un jugador.
 
     Cada porcion es un percentil dentro de su poblacion, no un valor absoluto:
@@ -49,7 +68,7 @@ def pizza(data: PizzaData, title: str, subtitle: str) -> Figure:
     if not len(data):
         raise ValueError("No hay metricas con percentil para dibujar el grafico.")
 
-    colores = [CATEGORY_COLORS.get(categoria, "#8A8A8A") for categoria in data.categories]
+    colores = [CATEGORY_COLORS.get(categoria, UNKNOWN_CATEGORY) for categoria in data.categories]
 
     baker = PyPizza(
         params=data.labels,
@@ -59,29 +78,29 @@ def pizza(data: PizzaData, title: str, subtitle: str) -> Figure:
         last_circle_color=GRID,
         last_circle_lw=1.5,
         other_circle_lw=0,
-        inner_circle_size=18,
+        inner_circle_size=16,
     )
 
     figura, ejes = baker.make_pizza(
         data.values,
-        figsize=(8.0, 8.6),
+        figsize=PIZZA_SIZE,
         color_blank_space="same",
         slice_colors=colores,
-        value_colors=["#FFFFFF"] * len(data),
+        value_colors=["#0E1420"] * len(data),
         value_bck_colors=colores,
-        blank_alpha=0.35,
+        blank_alpha=0.28,
         kwargs_slices={"edgecolor": BACKGROUND, "zorder": 2, "linewidth": 1},
-        kwargs_params={"color": TEXT, "fontsize": 10, "va": "center"},
+        kwargs_params={"color": TEXT, "fontsize": 8, "va": "center"},
         kwargs_values={
-            "color": "#FFFFFF",
-            "fontsize": 10,
+            "color": "#0E1420",
+            "fontsize": 8,
             "zorder": 3,
-            "bbox": {"edgecolor": "#000000", "boxstyle": "round,pad=0.2", "lw": 1},
+            "bbox": {"edgecolor": BACKGROUND, "boxstyle": "round,pad=0.15", "lw": 1},
         },
     )
 
-    figura.text(0.515, 0.975, title, size=16, ha="center", color=TEXT, weight="bold")
-    figura.text(0.515, 0.947, subtitle, size=10, ha="center", color="#5A5A5A")
+    figura.text(0.515, 0.985, title, size=13, ha="center", color=TEXT, weight="bold")
+    figura.text(0.515, 0.955, subtitle, size=8, ha="center", color=palette.accent)
     _legend(figura)
     ejes.set_facecolor(BACKGROUND)
     return figura
@@ -89,65 +108,249 @@ def pizza(data: PizzaData, title: str, subtitle: str) -> Figure:
 
 def _legend(figura: Figure) -> None:
     """Leyenda de categorias, en el pie del grafico."""
-    posiciones = {ATTACK: 0.30, POSSESSION: 0.50, DEFENCE: 0.70}
+    posiciones = {FINISHING: 0.24, CREATION: 0.50, BUILDUP: 0.76}
     for categoria, x in posiciones.items():
         figura.text(
             x,
-            0.022,
+            0.015,
             categoria,
-            size=11,
+            size=8,
             ha="center",
             color=CATEGORY_COLORS[categoria],
             weight="bold",
         )
 
 
-def style_map(data: StyleMapData, title: str) -> Figure:
-    """Mapa de estilos: posesion frente a altura de presion.
+def similarity_bars(
+    names: list[str],
+    scores: list[float],
+    palette: Palette = DEFAULT,
+) -> Figure:
+    """Barras horizontales con el parecido de cada jugador comparable.
+
+    Horizontales porque lo que hay que leer son nombres, y un nombre en
+    vertical no se lee. El eje arranca en el minimo de la serie y no en cero a
+    proposito: todos los vecinos rondan porcentajes altos, asi que un eje desde
+    cero los dejaria practicamente iguales y no ensenaria nada.
+    """
+    if not names:
+        raise ValueError("No hay jugadores parecidos que dibujar.")
+
+    figura, ejes = _lienzo(SMALL_SIZE)
+    posiciones = range(len(names))
+    ejes.barh(list(posiciones), scores, color=palette.accent, height=0.62, zorder=3)
+
+    for y, valor in zip(posiciones, scores, strict=True):
+        ejes.text(
+            valor - 0.4,
+            y,
+            f"{valor:.0f}",
+            va="center",
+            ha="right",
+            color="#0E1420",
+            fontsize=8,
+            weight="bold",
+            zorder=4,
+        )
+
+    ejes.set_yticks(list(posiciones), names, color=TEXT, fontsize=8)
+    ejes.invert_yaxis()
+    minimo = min(scores)
+    ejes.set_xlim(max(0, minimo - 6), min(100, max(scores) + 2))
+    ejes.set_xlabel("Parecido de perfil (%)", color=TEXT_MUTED, fontsize=8)
+    ejes.grid(axis="x", color=GRID, linewidth=0.7, zorder=1)
+    ejes.tick_params(axis="x", colors=TEXT_MUTED, labelsize=7)
+    figura.tight_layout()
+    return figura
+
+
+def scouting_plane(
+    reference: tuple[str, float, float],
+    neighbours: list[tuple[str, float, float]],
+    x_label: str,
+    y_label: str,
+    palette: Palette = DEFAULT,
+) -> Figure:
+    """Situa al jugador y a sus comparables en un plano de dos familias.
+
+    Es el grafico que convierte una lista de nombres en algo interpretable: no
+    dice solo *quien* se parece, sino *por donde*. Dos jugadores con el mismo
+    porcentaje de parecido pueden estar uno arriba y otro a la derecha, y para
+    un scout esa diferencia lo es todo.
+
+    Las lineas del 50 parten el plano en cuatro cuadrantes, que es como se lee
+    un perfil de un vistazo: mucho de esto y poco de aquello.
+    """
+    figura, ejes = _lienzo(SMALL_SIZE)
+
+    ejes.axvline(50, color=GRID, linewidth=1, zorder=1)
+    ejes.axhline(50, color=GRID, linewidth=1, zorder=1)
+
+    for nombre, x, y in neighbours:
+        ejes.scatter(x, y, s=52, color=palette.secondary, alpha=0.85, zorder=3)
+        ejes.annotate(
+            nombre,
+            (x, y),
+            xytext=(5, 4),
+            textcoords="offset points",
+            fontsize=7,
+            color=TEXT_MUTED,
+        )
+
+    nombre, x, y = reference
+    ejes.scatter(x, y, s=150, color=palette.accent, edgecolor=TEXT, linewidth=1.2, zorder=4)
+    ejes.annotate(
+        nombre,
+        (x, y),
+        xytext=(7, 6),
+        textcoords="offset points",
+        fontsize=8,
+        color=TEXT,
+        weight="bold",
+    )
+
+    ejes.set_xlim(0, 100)
+    ejes.set_ylim(0, 100)
+    ejes.set_xlabel(f"{x_label} (percentil)", color=TEXT_MUTED, fontsize=8)
+    ejes.set_ylabel(f"{y_label} (percentil)", color=TEXT_MUTED, fontsize=8)
+    ejes.grid(color=GRID, linewidth=0.6, alpha=0.6, zorder=0)
+    ejes.tick_params(colors=TEXT_MUTED, labelsize=7)
+    figura.tight_layout()
+    return figura
+
+
+def style_map(data: StyleMapData, title: str, palette: Palette = DEFAULT) -> Figure:
+    """Mapa de estilos: territorio frente a altura de presion.
+
+    El eje horizontal es cuanto campo pisa un equipo de verdad —llegadas a zona
+    de remate por partido— y no la posesion, que Understat no publica. Es ademas
+    un plano mas informativo: acumular pases y pisar el area rival no son lo
+    mismo.
 
     El eje vertical se invierte porque una PPDA baja significa presion alta:
     dejarlo sin invertir situaria a los equipos mas agresivos abajo, que es lo
-    contrario de lo que la vista sugiere intuitivamente.
+    contrario de lo que la vista sugiere.
     """
     if not len(data):
         raise ValueError("No hay equipos con posesion y presion conocidas.")
 
-    figura, ejes = plt.subplots(figsize=(9.0, 6.5))
-    figura.patch.set_facecolor(BACKGROUND)
-    ejes.set_facecolor(BACKGROUND)
+    figura, ejes = _lienzo(MAP_SIZE)
+    colores = plt.get_cmap("Set2")
 
-    colores = plt.get_cmap("tab10")
     for cluster in sorted(set(data.clusters)):
         indices = [i for i, valor in enumerate(data.clusters) if valor == cluster]
-        etiqueta = data.styles[indices[0]]
         ejes.scatter(
-            [data.possession[i] for i in indices],
+            [data.territory[i] for i in indices],
             [data.ppda[i] for i in indices],
-            s=110,
-            color=colores(cluster % 10),
+            s=90,
+            color=colores(cluster % 8),
             edgecolor=BACKGROUND,
             linewidth=1.2,
-            label=etiqueta,
+            label=data.styles[indices[0]],
             zorder=3,
         )
 
     for i, equipo in enumerate(data.teams):
         ejes.annotate(
             equipo,
-            (data.possession[i], data.ppda[i]),
-            xytext=(6, 4),
+            (data.territory[i], data.ppda[i]),
+            xytext=(5, 3),
             textcoords="offset points",
-            fontsize=8,
-            color=TEXT,
+            fontsize=7,
+            color=TEXT_MUTED,
         )
 
     ejes.invert_yaxis()
-    ejes.set_xlabel("Posesion (%)", color=TEXT)
-    ejes.set_ylabel("PPDA aproximada (arriba = mas presion)", color=TEXT)
-    ejes.set_title(title, color=TEXT, weight="bold", fontsize=14)
-    ejes.grid(color=GRID, linewidth=0.8, zorder=1)
-    ejes.legend(loc="best", fontsize=8, frameon=True, facecolor=BACKGROUND)
+    ejes.set_xlabel("Llegadas a zona de remate por partido", color=TEXT_MUTED, fontsize=9)
+    ejes.set_ylabel("PPDA aproximada (arriba = mas presion)", color=TEXT_MUTED, fontsize=9)
+    ejes.set_title(title, color=TEXT, weight="bold", fontsize=12)
+    ejes.grid(color=GRID, linewidth=0.7, zorder=1)
+    ejes.tick_params(colors=TEXT_MUTED, labelsize=8)
+    leyenda = ejes.legend(loc="best", fontsize=7, frameon=True, facecolor=BACKGROUND)
+    for texto in leyenda.get_texts():
+        texto.set_color(TEXT)
+    leyenda.get_frame().set_edgecolor(GRID)
     figura.tight_layout()
+    return figura
+
+
+def compare(
+    data: ComparisonData,
+    name_a: str,
+    name_b: str,
+    subtitle: str,
+    palette: Palette = DEFAULT,
+) -> Figure:
+    """Dibuja a dos jugadores sobre los mismos ejes.
+
+    Es el formato que mas circula en football analytics porque responde de un
+    vistazo a la pregunta que de verdad se hace un analista: no "como es este
+    jugador", sino "en que se diferencia de aquel".
+    """
+    if not len(data):
+        raise ValueError("Los dos jugadores no comparten ninguna metrica con percentil.")
+
+    color_a, color_b = palette.accent, palette.secondary
+
+    baker = PyPizza(
+        params=data.labels,
+        background_color=BACKGROUND,
+        straight_line_color=GRID,
+        straight_line_lw=1,
+        last_circle_color=GRID,
+        last_circle_lw=1.5,
+        other_circle_lw=0,
+        inner_circle_size=16,
+    )
+
+    figura, ejes = baker.make_pizza(
+        data.values_a,
+        compare_values=data.values_b,
+        figsize=COMPARE_SIZE,
+        kwargs_slices={
+            "facecolor": color_a,
+            "edgecolor": BACKGROUND,
+            "zorder": 2,
+            "linewidth": 1,
+        },
+        kwargs_compare={
+            "facecolor": color_b,
+            "edgecolor": BACKGROUND,
+            "zorder": 2,
+            "linewidth": 1,
+        },
+        kwargs_params={"color": TEXT, "fontsize": 8, "va": "center"},
+        kwargs_values={
+            "color": "#0E1420",
+            "fontsize": 8,
+            "zorder": 3,
+            "bbox": {
+                "edgecolor": BACKGROUND,
+                "facecolor": color_a,
+                "boxstyle": "round,pad=0.15",
+                "lw": 1,
+            },
+        },
+        kwargs_compare_values={
+            "color": "#0E1420",
+            "fontsize": 8,
+            "zorder": 3,
+            "bbox": {
+                "edgecolor": BACKGROUND,
+                "facecolor": color_b,
+                "boxstyle": "round,pad=0.15",
+                "lw": 1,
+            },
+        },
+    )
+
+    figura.text(
+        0.515, 0.985, f"{name_a}  vs  {name_b}", size=12, ha="center", color=TEXT, weight="bold"
+    )
+    figura.text(0.515, 0.955, subtitle, size=8, ha="center", color=TEXT_MUTED)
+    figura.text(0.34, 0.015, name_a, size=9, ha="center", color=color_a, weight="bold")
+    figura.text(0.66, 0.015, name_b, size=9, ha="center", color=color_b, weight="bold")
+    ejes.set_facecolor(BACKGROUND)
     return figura
 
 
@@ -170,73 +373,11 @@ def to_png(figura: Figure, dpi: int = 200) -> bytes:
     return buffer.getvalue()
 
 
-def compare(data: ComparisonData, name_a: str, name_b: str, subtitle: str) -> Figure:
-    """Dibuja a dos jugadores sobre los mismos ejes.
-
-    Es el formato que mas circula en football analytics porque responde de un
-    vistazo a la pregunta que de verdad se hace un analista: no "¿como es este
-    jugador?", sino "¿en que se diferencia de aquel?".
-    """
-    if not len(data):
-        raise ValueError("Los dos jugadores no comparten ninguna metrica con percentil.")
-
-    baker = PyPizza(
-        params=data.labels,
-        background_color=BACKGROUND,
-        straight_line_color=GRID,
-        straight_line_lw=1,
-        last_circle_color=GRID,
-        last_circle_lw=1.5,
-        other_circle_lw=0,
-        inner_circle_size=18,
-    )
-
-    figura, ejes = baker.make_pizza(
-        data.values_a,
-        compare_values=data.values_b,
-        figsize=(8.0, 8.6),
-        kwargs_slices={
-            "facecolor": COMPARE_A,
-            "edgecolor": BACKGROUND,
-            "zorder": 2,
-            "linewidth": 1,
-        },
-        kwargs_compare={
-            "facecolor": COMPARE_B,
-            "edgecolor": BACKGROUND,
-            "zorder": 2,
-            "linewidth": 1,
-        },
-        kwargs_params={"color": TEXT, "fontsize": 10, "va": "center"},
-        kwargs_values={
-            "color": "#FFFFFF",
-            "fontsize": 9,
-            "zorder": 3,
-            "bbox": {
-                "edgecolor": "#000000",
-                "facecolor": COMPARE_A,
-                "boxstyle": "round,pad=0.2",
-                "lw": 1,
-            },
-        },
-        kwargs_compare_values={
-            "color": "#FFFFFF",
-            "fontsize": 9,
-            "zorder": 3,
-            "bbox": {
-                "edgecolor": "#000000",
-                "facecolor": COMPARE_B,
-                "boxstyle": "round,pad=0.2",
-                "lw": 1,
-            },
-        },
-    )
-
-    figura.text(
-        0.515, 0.975, f"{name_a}  vs  {name_b}", size=15, ha="center", color=TEXT, weight="bold"
-    )
-    figura.text(0.515, 0.947, subtitle, size=10, ha="center", color="#5A5A5A")
-    figura.text(0.36, 0.022, name_a, size=11, ha="center", color=COMPARE_A, weight="bold")
-    figura.text(0.64, 0.022, name_b, size=11, ha="center", color=COMPARE_B, weight="bold")
+def _lienzo(size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
+    """Figura con el fondo oscuro y los bordes del tema ya aplicados."""
+    figura, ejes = plt.subplots(figsize=size)
+    figura.patch.set_facecolor(BACKGROUND)
     ejes.set_facecolor(BACKGROUND)
-    return figura
+    for lado in ejes.spines.values():
+        lado.set_color(GRID)
+    return figura, ejes

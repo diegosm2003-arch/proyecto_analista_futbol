@@ -1,4 +1,19 @@
-"""Vista de jugadores: buscador y perfil de percentiles."""
+"""Vista de jugadores: buscador, perfil de percentiles y comparables.
+
+**Los filtros van arriba y no en un lateral.** Se cambian constantemente y son
+lo que define lo que se esta mirando; tenerlos en la misma linea de vision que
+el resultado evita el salto de ojo a un lateral que el resto del tiempo esta
+vacio, y deja la barra lateral para lo que se consulta de vez en cuando: de que
+carga vienen los datos.
+
+**El grafico y su lectura van uno al lado del otro.** El pizza chart ensena doce
+ejes a la vez y no dice por donde empezar; el panel de la derecha responde a eso
+sin obligar a bajar. Por eso el grafico se dibuja mas pequeno que antes: cabian
+los dos, pero solo si el circulo no ocupa la pantalla entera.
+
+**Los comparables cierran la pantalla.** Es la pregunta con la que sigue un
+scout despues de ver un perfil que le gusta: quien mas juega asi.
+"""
 
 from __future__ import annotations
 
@@ -12,8 +27,10 @@ from futbol_front.state import (
     cached_market,
     cached_profile,
     cached_search,
+    cached_similar,
     cached_templates,
 )
+from futbol_front.theme import Palette, apply
 
 BASES = {
     "Por 90 minutos": "per90",
@@ -25,28 +42,34 @@ POBLACIONES = {
     "Su rol (mas fino, muestra menor)": "role",
 }
 
+TODAS_LAS_LIGAS = "Todas las Big 5"
+
+# Comparables que se piden. Seis caben en el grafico sin que las etiquetas se
+# pisen, y son suficientes para ver un patron.
+COMPARABLES = 6
+
 
 def render() -> None:
-    st.title("Percentiles por posicion")
-    st.caption(
-        "Cada eje es el percentil del jugador frente a los jugadores comparables "
-        "de las Big 5 ligas en esa temporada, no un valor absoluto."
-    )
-
     try:
         catalogo = cached_catalog()
     except ApiError as error:
+        apply(None)
         st.error(f"No se ha podido leer el catalogo: {error}")
         return
 
     if not catalogo["seasons"]:
+        apply(None)
         st.warning(
             "No hay datos cargados todavia. Lanza el ETL: "
             "`docker compose --profile etl run --rm etl`"
         )
         return
 
-    filtros = _filtros(catalogo)
+    filtros, base, poblacion = _barra_de_filtros(catalogo)
+    # El tema se aplica DESPUES de leer los filtros: el acento depende de la
+    # liga elegida, asi que hasta aqui no se sabe cual toca.
+    paleta = apply(filtros["league"])
+
     try:
         jugadores = cached_search(**filtros)
     except ApiError as error:
@@ -54,12 +77,10 @@ def render() -> None:
         return
 
     if not jugadores:
-        st.info("Ningun jugador cumple los filtros.")
+        st.info("Ningun jugador cumple los filtros. Prueba a quitar el nombre o la posicion.")
         return
 
-    seleccionado = _selector(jugadores)
-    base, poblacion = _opciones_de_comparacion()
-    rival = _selector_de_comparacion(jugadores, seleccionado)
+    seleccionado, rival = _seleccion(jugadores, paleta)
 
     try:
         perfil = cached_profile(
@@ -89,14 +110,381 @@ def render() -> None:
 
     plantillas = cached_templates()
     if perfil_rival:
-        _comparacion(perfil, perfil_rival, plantillas)
+        _comparacion(perfil, perfil_rival, plantillas, paleta)
         return
 
     rendimiento, mercado = st.tabs(["Rendimiento", "Mercado y carrera"])
     with rendimiento:
-        _perfil(perfil, cliente_templates=plantillas)
+        _perfil(perfil, plantillas, paleta)
+        _similares(perfil, base, paleta)
     with mercado:
         _mercado(perfil["player"])
+
+
+# --- Filtros ----------------------------------------------------------------
+
+
+def _barra_de_filtros(catalogo: dict) -> tuple[dict, str, str]:
+    """Cinta de filtros en la parte superior.
+
+    Devuelve los parametros de busqueda y las dos opciones que definen contra
+    quien se compara. Van juntos porque son la misma decision: que poblacion
+    estoy mirando.
+    """
+    st.markdown('<div class="barra-filtros">', unsafe_allow_html=True)
+
+    temporada_c, liga_c, posicion_c, nombre_c = st.columns([1, 2, 1, 2])
+    with temporada_c:
+        temporada = st.selectbox(
+            "Temporada", catalogo["seasons"], index=len(catalogo["seasons"]) - 1
+        )
+    with liga_c:
+        liga = st.selectbox("Liga", [TODAS_LAS_LIGAS, *catalogo["leagues"]])
+    with posicion_c:
+        posicion = st.selectbox("Posicion", ["Todas", "GK", "DF", "MF", "FW"])
+    with nombre_c:
+        nombre = st.text_input("Nombre", placeholder="Busqueda parcial")
+
+    base_c, poblacion_c = st.columns(2)
+    with base_c:
+        base = st.radio(
+            "Normalizacion",
+            list(BASES),
+            horizontal=True,
+            help=(
+                "El ajuste por posesion corrige que un jugador de un equipo que "
+                "domina tiene menos ocasiones de defender."
+            ),
+        )
+    with poblacion_c:
+        poblacion = st.radio(
+            "Comparar contra",
+            list(POBLACIONES),
+            horizontal=True,
+            help="El rol es mas preciso, pero la poblacion se reduce a un cuarto.",
+        )
+
+    _aviso_de_umbral(catalogo, temporada)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    return (
+        {
+            "season": temporada,
+            "league": None if liga == TODAS_LAS_LIGAS else liga,
+            "position_group": None if posicion == "Todas" else posicion,
+            "name": nombre or None,
+        },
+        BASES[base],
+        POBLACIONES[poblacion],
+    )
+
+
+def _aviso_de_umbral(catalogo: dict, temporada: str) -> None:
+    """El umbral real, no el configurado.
+
+    Al principio de temporada baja para que la plataforma no salga vacia, y
+    anunciar el otro seria mentir sobre quien esta entrando en la comparacion.
+    """
+    umbral = catalogo.get("min_minutes_applied", {}).get(temporada, catalogo["min_minutes"])
+    if umbral < catalogo["min_minutes"]:
+        st.caption(
+            f":orange[Entran los jugadores con al menos **{umbral} minutos**. El umbral "
+            f"ha bajado desde los {catalogo['min_minutes']} habituales porque la "
+            f"temporada acaba de empezar: con tan pocos partidos, las metricas por 90 "
+            f"son inestables.]"
+        )
+    else:
+        st.caption(f"Entran en la comparacion los jugadores con al menos {umbral} minutos.")
+
+
+def _seleccion(jugadores: list[dict], paleta: Palette) -> tuple[dict, dict | None]:
+    """Jugador a analizar y, opcionalmente, con quien compararlo."""
+    jugador_c, rival_c = st.columns([3, 2])
+
+    with jugador_c:
+        etiquetas = {f"{j['player']} - {j['team']} ({j['minutes']} min)": j for j in jugadores}
+        elegido = etiquetas[
+            st.selectbox(f"Jugador ({len(jugadores)} encontrados)", list(etiquetas))
+        ]
+
+    with rival_c:
+        rival = _selector_de_comparacion(jugadores, elegido)
+
+    ficha = elegido
+    st.markdown(
+        f'<div class="cinta-liga">{paleta.name}</div> '
+        f'<span style="color:#8D9AB4;margin-left:.6rem;">{ficha["team"]} &middot; '
+        f"{ficha['position_group'] or 'sin posicion'}"
+        f"{' &middot; ' + ficha['detailed_position'] if ficha['detailed_position'] else ''}"
+        f"</span>",
+        unsafe_allow_html=True,
+    )
+    return elegido, rival
+
+
+def _selector_de_comparacion(jugadores: list[dict], elegido: dict) -> dict | None:
+    """Segundo jugador, opcional.
+
+    Solo se ofrecen jugadores del mismo grupo de posicion: comparar a un central
+    con un delantero sobre los ejes de un central no dice nada de ninguno de los
+    dos.
+    """
+    comparables = [
+        j
+        for j in jugadores
+        if j["position_group"] == elegido["position_group"]
+        and (j["player"], j["team"]) != (elegido["player"], elegido["team"])
+    ]
+    if not comparables:
+        return None
+
+    etiquetas: dict[str, dict | None] = {"Ninguno": None}
+    etiquetas.update({f"{j['player']} - {j['team']}": j for j in comparables})
+    seleccion = st.selectbox(
+        "Comparar con",
+        list(etiquetas),
+        help="Solo jugadores de la misma posicion: los ejes del grafico dependen de ella.",
+    )
+    return etiquetas[seleccion]
+
+
+# --- Perfil -----------------------------------------------------------------
+
+
+def _perfil(perfil: dict, plantillas: list[dict], paleta: Palette) -> None:
+    """Grafico a la izquierda, lectura del grafico a la derecha."""
+    ficha = perfil["player"]
+    plantilla = _plantilla(plantillas, ficha["position_group"])
+
+    if not plantilla:
+        st.info(
+            "No hay grafico definido para esta posicion. Understat no publica metricas "
+            "de portero, asi que se muestra solo la tabla."
+        )
+        _tabla(perfil)
+        return
+
+    datos = presentation.prepare_pizza(perfil, plantilla)
+    if not len(datos):
+        st.info("El jugador no tiene percentiles calculables en esta base.")
+        return
+
+    grafico, panel = st.columns([3, 2], gap="large")
+
+    with grafico:
+        figura = charts.pizza(
+            datos, f"{ficha['player']} - {ficha['team']}", _subtitulo(perfil), paleta
+        )
+        st.pyplot(figura, width="content")
+        if datos.missing:
+            st.caption("Sin datos para: " + ", ".join(datos.missing))
+        _descargar(figura, ficha["player"], ficha["season"], perfil["basis"])
+
+    with panel:
+        _panel_de_lectura(perfil)
+
+
+def _panel_de_lectura(perfil: dict) -> None:
+    """Lo que hay que saber para leer el grafico que tiene al lado.
+
+    Va aqui y no debajo porque se lee A LA VEZ que el grafico: bajar para saber
+    que un percentil esta inflado por la posesion del equipo llega tarde, ya se
+    ha sacado la conclusion.
+    """
+    st.markdown(f"**{presentation.summarise_profile(perfil)}**")
+
+    avisos = presentation.extreme_metrics(perfil)
+    if avisos:
+        st.markdown("###### Donde se sale de lo normal")
+        for aviso in avisos:
+            pintar, icono, encabezado = _ESTILO_AVISO[aviso.kind]
+            pintar(f"**{encabezado}** · {aviso.text}", icon=icono)
+            if aviso.note:
+                st.caption(f"Ojo: {aviso.note}.")
+    else:
+        st.caption(
+            "Ninguna metrica se sale del rango habitual: es un perfil regular, sin un "
+            "punto fuerte ni un agujero claros."
+        )
+
+    if perfil["caveats"]:
+        with st.popover("Advertencias de lectura", width="stretch"):
+            for aviso in perfil["caveats"]:
+                st.warning(aviso, icon=":material/info:")
+
+    with st.popover("Detalle numerico", width="stretch"):
+        _detalle(perfil)
+
+
+# Como se pinta cada tipo de aviso. El rasgo va en azul a proposito: describe al
+# jugador, no lo califica, y en verde se leeria como un elogio.
+_ESTILO_AVISO = {
+    "fortaleza": (st.success, ":material/trending_up:", "Muy por encima"),
+    "debilidad": (st.error, ":material/trending_down:", "Muy por debajo"),
+    "rasgo": (st.info, ":material/insights:", "Rasgo marcado"),
+}
+
+
+# --- Comparables ------------------------------------------------------------
+
+
+def _similares(perfil: dict, base: str, paleta: Palette) -> None:
+    """Quien mas juega asi, con dos graficos que responden a cosas distintas.
+
+    Las barras dicen *cuanto* se parecen; el plano dice *por donde*. Dos
+    jugadores con el mismo porcentaje pueden estar uno arriba y otro a la
+    derecha, y para un scout esa diferencia lo es todo.
+    """
+    ficha = perfil["player"]
+    st.divider()
+    st.subheader("Jugadores similares")
+
+    try:
+        datos = cached_similar(
+            player=ficha["player"],
+            season=ficha["season"],
+            team=ficha["team"],
+            basis=base,
+            limit=COMPARABLES,
+        )
+    except ApiError as error:
+        st.error(str(error))
+        return
+
+    vecinos = datos["neighbours"]
+    if not vecinos:
+        st.info(
+            "Sin comparables. Suele pasar con perfiles a los que les faltan metricas, "
+            "o en posiciones con pocos jugadores por encima del umbral de minutos."
+        )
+        return
+
+    st.caption(
+        f"Los mas parecidos a **{ficha['player']}** dentro de su grupo "
+        f"({datos['population_group']}) en las Big 5, por su vector de percentiles."
+    )
+
+    barras_c, plano_c = st.columns(2, gap="large")
+
+    with barras_c:
+        figura = charts.similarity_bars(
+            [f"{v['player']} ({v['team']})" for v in vecinos],
+            [v["similarity"] for v in vecinos],
+            paleta,
+        )
+        st.pyplot(figura, width="content")
+
+    with plano_c:
+        _plano(datos, ficha["player"], paleta)
+
+    _tabla_de_similares(vecinos)
+
+    for aviso in datos["caveats"]:
+        st.caption(f":orange[{aviso}]")
+
+
+def _plano(datos: dict, nombre: str, paleta: Palette) -> None:
+    """Plano de dos familias, con los ejes que el usuario elija.
+
+    Se dejan elegir porque la pregunta cambia con la posicion: en un delantero
+    interesa finalizacion frente a creacion, y en un mediocentro construccion
+    frente a creacion.
+    """
+    familias = sorted(datos["profile"])
+    if len(familias) < 2:
+        st.info("El perfil no tiene familias suficientes para dibujar el plano.")
+        return
+
+    eje_x, eje_y = st.columns(2)
+    with eje_x:
+        x = st.selectbox("Eje horizontal", familias, index=0, key="plano_x")
+    with eje_y:
+        y = st.selectbox("Eje vertical", familias, index=min(len(familias) - 1, 1), key="plano_y")
+
+    vecinos = [
+        (v["player"], v["profile"].get(x), v["profile"].get(y))
+        for v in datos["neighbours"]
+        if v["profile"].get(x) is not None and v["profile"].get(y) is not None
+    ]
+    figura = charts.scouting_plane(
+        (nombre, datos["profile"][x], datos["profile"][y]), vecinos, x, y, paleta
+    )
+    st.pyplot(figura, width="content")
+
+
+def _tabla_de_similares(vecinos: list[dict]) -> None:
+    """El detalle de cada comparable, plegado.
+
+    Con "en que se parecen" y "en que se separan": una lista de nombres y un
+    porcentaje no se puede defender ante nadie; con los ejes, si.
+    """
+    with st.expander(f"Detalle de los {len(vecinos)} comparables"):
+        st.dataframe(
+            [
+                {
+                    "Jugador": v["player"],
+                    "Equipo": v["team"],
+                    "Liga": v["league"],
+                    "Minutos": v["minutes"],
+                    "Parecido": f"{v['similarity']:.0f} %",
+                    "Se parecen en": ", ".join(v["closest"]),
+                    "Se separan en": ", ".join(v["furthest"]),
+                }
+                for v in vecinos
+            ],
+            hide_index=True,
+            width="stretch",
+        )
+
+
+# --- Comparacion de dos jugadores -------------------------------------------
+
+
+def _comparacion(perfil: dict, rival: dict, templates: list[dict], paleta: Palette) -> None:
+    """Pinta a los dos jugadores sobre los mismos ejes."""
+    ficha, ficha_rival = perfil["player"], rival["player"]
+    plantilla = _plantilla(templates, ficha["position_group"])
+    if not plantilla:
+        st.info("Esta posicion no tiene grafico definido.")
+        return
+
+    datos = presentation.prepare_comparison(perfil, rival, plantilla)
+    if not len(datos):
+        st.info("Los dos jugadores no comparten metricas con percentil.")
+        return
+
+    grafico, panel = st.columns([3, 2], gap="large")
+
+    with grafico:
+        figura = charts.compare(
+            datos,
+            f"{ficha['player']} ({ficha['team']})",
+            f"{ficha_rival['player']} ({ficha_rival['team']})",
+            _subtitulo(perfil),
+            paleta,
+        )
+        st.pyplot(figura, width="content")
+        if datos.missing:
+            st.caption("Sin datos para: " + ", ".join(datos.missing))
+        _descargar_figura(
+            figura,
+            presentation.chart_filename(
+                ficha["player"], "vs", ficha_rival["player"], ficha["season"]
+            ),
+        )
+
+    with panel:
+        st.markdown(f"###### {ficha['player']}")
+        st.markdown(presentation.summarise_profile(perfil))
+        st.markdown(f"###### {ficha_rival['player']}")
+        st.markdown(presentation.summarise_profile(rival))
+        if perfil["caveats"]:
+            with st.popover("Advertencias de lectura", width="stretch"):
+                for aviso in perfil["caveats"]:
+                    st.warning(aviso, icon=":material/info:")
+
+
+# --- Mercado ----------------------------------------------------------------
 
 
 def _mercado(ficha: dict) -> None:
@@ -105,8 +493,7 @@ def _mercado(ficha: dict) -> None:
     Va en su propia pestana y no junto al grafico porque responde a otra
     pregunta. El pizza chart dice como juega; esto dice quien es: que edad
     tiene, cuanto vale, de donde viene y hasta cuando esta atado. Un percentil
-    95 no significa lo mismo a los 19 anos que a los 33, y sin esta pestana esa
-    diferencia no se ve en ningun sitio.
+    95 no significa lo mismo a los 19 anos que a los 33.
     """
     try:
         datos = cached_market(ficha["player"], ficha["season"], ficha["team"])
@@ -138,35 +525,40 @@ def _mercado(ficha: dict) -> None:
             delta=_millones(actual - maximo) if maximo and actual != maximo else None,
         )
 
+    curva, carrera = st.columns([3, 2], gap="large")
+
     tasaciones = datos["valuations"]
-    if tasaciones:
-        st.subheader("Curva de valor")
-        # La curva dice mas que la cifra: distingue al canterano en subida del
-        # veterano en caida, aunque hoy valgan lo mismo.
-        st.line_chart(
-            {"Millones de euros": [(v["market_value_eur"] or 0) / 1e6 for v in tasaciones]},
-            x_label="Tasaciones, de la mas antigua a la mas reciente",
-        )
+    with curva:
+        if tasaciones:
+            st.markdown("###### Curva de valor")
+            # La curva dice mas que la cifra: distingue al canterano en subida
+            # del veterano en caida, aunque hoy valgan lo mismo.
+            st.line_chart(
+                {"Millones de euros": [(v["market_value_eur"] or 0) / 1e6 for v in tasaciones]},
+                x_label="Tasaciones, de la mas antigua a la mas reciente",
+                height=260,
+            )
 
     fichajes = datos["transfers"]
-    if fichajes:
-        st.subheader("Carrera")
-        st.dataframe(
-            [
-                {
-                    "Fecha": f["transfer_date"],
-                    "Desde": f["club_from"],
-                    "Hasta": f["club_to"],
-                    "Tipo": f["transfer_type"] or "sin constar",
-                    "Importe": _millones(f["fee_eur"]),
-                }
-                for f in reversed(fichajes)
-            ],
-            hide_index=True,
-            width="stretch",
-        )
-    elif not datos["caveats"]:
-        st.caption("Sin fichajes registrados: puede llevar toda su carrera en el mismo club.")
+    with carrera:
+        if fichajes:
+            st.markdown("###### Carrera")
+            st.dataframe(
+                [
+                    {
+                        "Fecha": f["transfer_date"],
+                        "Desde": f["club_from"],
+                        "Hasta": f["club_to"],
+                        "Importe": _millones(f["fee_eur"]),
+                    }
+                    for f in reversed(fichajes)
+                ],
+                hide_index=True,
+                width="stretch",
+                height=260,
+            )
+        elif not datos["caveats"]:
+            st.caption("Sin fichajes registrados: puede llevar toda su carrera en el mismo club.")
 
 
 def _millones(valor: float | None) -> str:
@@ -176,184 +568,7 @@ def _millones(valor: float | None) -> str:
     return f"{valor / 1e6:,.1f} M EUR".replace(",", ".")
 
 
-def _filtros(catalogo: dict) -> dict:
-    """Barra lateral de filtros. Devuelve los parametros de busqueda."""
-    with st.sidebar:
-        st.header("Filtros")
-        temporada = st.selectbox(
-            "Temporada", catalogo["seasons"], index=len(catalogo["seasons"]) - 1
-        )
-        liga = st.selectbox("Liga", ["Todas las Big 5", *catalogo["leagues"]])
-        posicion = st.selectbox("Posicion", ["Todas", "GK", "DF", "MF", "FW"])
-        nombre = st.text_input("Nombre", placeholder="Busqueda parcial")
-        # El umbral real, no el configurado: al principio de temporada baja
-        # para que la plataforma no salga vacia, y anunciar el otro seria
-        # mentir sobre quien esta entrando en la comparacion.
-        umbral = catalogo.get("min_minutes_applied", {}).get(temporada, catalogo["min_minutes"])
-        st.caption(f"Solo entran en la comparacion los jugadores con al menos {umbral} minutos.")
-        if umbral < catalogo["min_minutes"]:
-            st.caption(
-                f":orange[Temporada empezada: el umbral ha bajado desde los "
-                f"{catalogo['min_minutes']} minutos habituales. Con tan pocos "
-                f"partidos, las metricas por 90 son inestables.]"
-            )
-
-    return {
-        "season": temporada,
-        "league": None if liga == "Todas las Big 5" else liga,
-        "position_group": None if posicion == "Todas" else posicion,
-        "name": nombre or None,
-    }
-
-
-def _selector(jugadores: list[dict]) -> dict:
-    """Selector de jugador. Distingue etapas si hubo traspaso."""
-    etiquetas = {f"{j['player']} - {j['team']} ({j['minutes']} min)": j for j in jugadores}
-    elegido = st.selectbox(f"Jugador ({len(jugadores)} encontrados)", list(etiquetas))
-    return etiquetas[elegido]
-
-
-def _selector_de_comparacion(jugadores: list[dict], elegido: dict) -> dict | None:
-    """Segundo jugador, opcional.
-
-    Solo se ofrecen jugadores del mismo grupo de posicion: comparar a un central
-    con un delantero sobre los ejes de un central no dice nada de ninguno de los
-    dos.
-    """
-    comparables = [
-        j
-        for j in jugadores
-        if j["position_group"] == elegido["position_group"]
-        and (j["player"], j["team"]) != (elegido["player"], elegido["team"])
-    ]
-    if not comparables:
-        return None
-
-    etiquetas = {"Ninguno": None}
-    etiquetas.update({f"{j['player']} - {j['team']}": j for j in comparables})
-    seleccion = st.selectbox(
-        "Comparar con",
-        list(etiquetas),
-        help="Solo jugadores de la misma posicion: los ejes del grafico dependen de ella.",
-    )
-    return etiquetas[seleccion]
-
-
-def _comparacion(perfil: dict, rival: dict, templates: list[dict]) -> None:
-    """Pinta a los dos jugadores sobre los mismos ejes."""
-    ficha, ficha_rival = perfil["player"], rival["player"]
-    plantilla = _plantilla(templates, ficha["position_group"])
-    if not plantilla:
-        st.info("Esta posicion no tiene grafico definido.")
-        return
-
-    for aviso in perfil["caveats"]:
-        st.warning(aviso, icon=":material/info:")
-
-    datos = presentation.prepare_comparison(perfil, rival, plantilla)
-    if not len(datos):
-        st.info("Los dos jugadores no comparten metricas con percentil.")
-        return
-
-    figura = charts.compare(
-        datos,
-        f"{ficha['player']} ({ficha['team']})",
-        f"{ficha_rival['player']} ({ficha_rival['team']})",
-        _subtitulo(perfil),
-    )
-    st.pyplot(figura, width="content")
-    _descargar_figura(
-        figura,
-        presentation.chart_filename(ficha["player"], "vs", ficha_rival["player"], ficha["season"]),
-    )
-    if datos.missing:
-        st.caption("Sin datos para: " + ", ".join(datos.missing))
-
-
-def _opciones_de_comparacion() -> tuple[str, str]:
-    columna_base, columna_poblacion = st.columns(2)
-    with columna_base:
-        base = st.radio(
-            "Normalizacion",
-            list(BASES),
-            horizontal=True,
-            help=(
-                "El ajuste por posesion corrige que un jugador de un equipo que "
-                "domina tiene menos ocasiones de defender."
-            ),
-        )
-    with columna_poblacion:
-        poblacion = st.radio(
-            "Comparar contra",
-            list(POBLACIONES),
-            horizontal=True,
-            help="El rol es mas preciso, pero la poblacion se reduce a un cuarto.",
-        )
-    return BASES[base], POBLACIONES[poblacion]
-
-
-# Como se pinta cada tipo de aviso. El rasgo va en gris a proposito: describe al
-# jugador, no lo califica, y en verde se leeria como un elogio.
-_ESTILO_AVISO = {
-    "fortaleza": (st.success, ":material/trending_up:", "Muy por encima"),
-    "debilidad": (st.error, ":material/trending_down:", "Muy por debajo"),
-    "rasgo": (st.info, ":material/insights:", "Rasgo marcado"),
-}
-
-
-def _extremos(perfil: dict) -> None:
-    """Senala las metricas en las que el jugador se sale de lo normal.
-
-    El pizza chart ensena doce ejes a la vez y no dice por donde empezar a
-    mirar. Esto contesta lo primero que se pregunta un analista delante de un
-    perfil: que tiene este jugador de verdaderamente distinto.
-    """
-    avisos = presentation.extreme_metrics(perfil)
-    if not avisos:
-        st.caption(
-            "Ninguna metrica se sale del rango habitual: es un perfil regular, "
-            "sin un punto fuerte ni un agujero claros."
-        )
-        return
-
-    with st.expander(f"Donde se sale de lo normal ({len(avisos)})", expanded=True):
-        for aviso in avisos:
-            pintar, icono, encabezado = _ESTILO_AVISO[aviso.kind]
-            pintar(f"**{encabezado}** - {aviso.text}", icon=icono)
-            if aviso.note:
-                st.caption(f"Ojo: {aviso.note}.")
-
-
-def _perfil(perfil: dict, cliente_templates: list[dict]) -> None:
-    """Pinta el grafico, las advertencias y la tabla de metricas."""
-    ficha = perfil["player"]
-    plantilla = _plantilla(cliente_templates, ficha["position_group"])
-
-    for aviso in perfil["caveats"]:
-        st.warning(aviso, icon=":material/info:")
-
-    if not plantilla:
-        st.info(
-            "No hay grafico definido para esta posicion. Las metricas de portero "
-            "disponibles en FBref no dan para un pizza chart legible, asi que se "
-            "muestra la tabla."
-        )
-    else:
-        datos = presentation.prepare_pizza(perfil, plantilla)
-        if len(datos):
-            titulo = f"{ficha['player']} - {ficha['team']}"
-            subtitulo = _subtitulo(perfil)
-            figura = charts.pizza(datos, titulo, subtitulo)
-            st.pyplot(figura, width="content")
-            st.markdown(f"**{presentation.summarise_profile(perfil)}**")
-            _descargar(figura, ficha["player"], ficha["season"], perfil["basis"])
-            _extremos(perfil)
-            if datos.missing:
-                st.caption("Sin datos para: " + ", ".join(datos.missing))
-        else:
-            st.info("El jugador no tiene percentiles calculables en esta base.")
-
-    _tabla(perfil)
+# --- Utilidades -------------------------------------------------------------
 
 
 def _descargar(figura, jugador: str, temporada: str, base: str) -> None:
@@ -394,8 +609,8 @@ def _subtitulo(perfil: dict) -> str:
     )
 
 
-def _tabla(perfil: dict) -> None:
-    """Tabla con el detalle numerico, para quien quiera el valor y no el percentil."""
+def _detalle(perfil: dict) -> None:
+    """Tabla con el valor numerico, para quien quiera el dato y no el percentil."""
     filas = pd.DataFrame(perfil["metrics"])
     if filas.empty:
         return
@@ -411,13 +626,14 @@ def _tabla(perfil: dict) -> None:
     )
     columnas = [c for c in ("Metrica", "Total", "Por 90", "Ajustado", "Percentil") if c in filas]
 
+    st.caption(
+        "Las metricas sin direccion (las tarjetas, los tiros) tienen percentil pero no "
+        "significan mejor ni peor: describen como juega."
+    )
+    st.dataframe(filas[columnas].round(2), hide_index=True, width="stretch")
+
+
+def _tabla(perfil: dict) -> None:
+    """Detalle numerico plegado, para las posiciones sin grafico."""
     with st.expander("Detalle numerico"):
-        st.caption(
-            "Las metricas sin direccion (estilo, como despejes) tienen percentil "
-            "pero no significan mejor ni peor: describen donde juega."
-        )
-        st.dataframe(
-            filas[columnas].round(2),
-            hide_index=True,
-            width="stretch",
-        )
+        _detalle(perfil)

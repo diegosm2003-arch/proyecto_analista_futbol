@@ -583,3 +583,15 @@ def test_el_catalogo_publica_el_umbral_que_se_aplica_de_verdad(client: TestClien
     assert set(catalogo["min_minutes_applied"]) == set(catalogo["seasons"])
     for temporada, umbral in catalogo["min_minutes_applied"].items():
         assert 0 < umbral <= catalogo["min_minutes"], temporada
+
+
+def test_el_mapa_de_estilos_recibe_los_rasgos_que_lo_situan(client: TestClient) -> None:
+    # Fallo silencioso que tuvo el mapa vacio desde el cambio a Understat: la
+    # API pedia `possession` y `pressing_height`, que eran columnas de FBref y
+    # dejaron de existir. Devolvia nulos, el mapa se quedaba sin puntos y no
+    # habia ningun error que mirar.
+    equipos = client.get("/teams/styles?season=2526").json()["teams"]
+
+    assert equipos
+    assert all(e["ppda"] is not None for e in equipos)
+    assert all(e["territory"] is not None for e in equipos)

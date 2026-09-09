@@ -8,6 +8,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
+from futbol_analytics.analysis import similarity
 from futbol_analytics.api import services
 from futbol_analytics.api.dependencies import DataAccessDep
 from futbol_analytics.api.repository import DataAccess
@@ -20,10 +21,13 @@ from futbol_analytics.api.schemas import (
     PlayerSummary,
     Population,
     PositionGroup,
+    SimilarPlayer,
+    SimilarPlayers,
     Transfer,
     Valuation,
 )
 from futbol_analytics.metrics import PLAYER_METRICS, metrics_for_position
+from futbol_analytics.templates import OUTFIELD_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +237,110 @@ def market(
         transfers=[Transfer(**_solo(t, Transfer)) for t in crudo["transfers"]],
         caveats=avisos,
     )
+
+
+@router.get("/{player}/similar", summary="Jugadores con un perfil parecido")
+def similar(
+    player: str,
+    season: str,
+    data: DataAccessDep,
+    team: str | None = Query(default=None, description="Necesario si cambio de equipo"),
+    basis: Basis = "per90",
+    limit: int = Query(default=similarity.DEFAULT_NEIGHBOURS, ge=1, le=20),
+) -> SimilarPlayers:
+    """Quien mas juega como el, dentro de su mismo grupo posicional.
+
+    Es la pregunta con la que trabaja un scout: este futbolista me gusta, quien
+    mas hace esto. No es un ranking de calidad ni una recomendacion: es un
+    vecindario en el espacio de percentiles.
+
+    Se compara **contra su propio grupo posicional** y con el mismo umbral de
+    minutos que el resto de la plataforma, porque un perfil construido sobre
+    noventa minutos no se parece a nada.
+    """
+    todos = _percentiles(data, season, "position")
+    contexto = services.population_context(data, season)
+
+    ficha = todos[(todos["player"] == player) & (todos["season"] == season)]
+    if team:
+        ficha = ficha[ficha["team"] == team]
+    if ficha.empty:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{player!r} no aparece en la temporada {season!r}.",
+        )
+    if len(ficha["team"].unique()) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{player!r} tiene varias etapas en {season!r}. Indica el equipo.",
+        )
+
+    resumen = _summary(ficha.iloc[0])
+    resultado = similarity.nearest(
+        todos,
+        player=player,
+        team=team or resumen.team,
+        basis=basis,
+        n=limit,
+        min_minutes=contexto["min_minutes"],
+        # Solo las metricas de aportacion. Las que no tienen direccion son los
+        # denominadores y las tarjetas, y una metrica donde casi todos valen lo
+        # mismo no separa a nadie: con las rojas dentro, media liga salia
+        # "parecida en tarjetas rojas".
+        metrics=[m.name for m in PLAYER_METRICS if m.higher_is_better is not None],
+        families=_familias(),
+    )
+
+    vecinos = resultado.neighbours
+    avisos = [
+        "El parecido solo abarca lo que mide el catalogo, que hoy son metricas de "
+        "ataque: dos defensas parecidos lo son con balon, no defendiendo."
+    ]
+    if not vecinos:
+        avisos.append(
+            "Sin jugadores comparables. Suele pasar con perfiles a los que les faltan "
+            "metricas, o en posiciones con pocos jugadores por encima del umbral."
+        )
+
+    return SimilarPlayers(
+        player=resumen,
+        basis=basis,
+        population_group=resumen.position_group,
+        profile=resultado.profile,
+        neighbours=[
+            SimilarPlayer(
+                league=v.league,
+                team=v.team,
+                player=v.player,
+                minutes=v.minutes,
+                similarity=v.similarity,
+                closest=[_etiqueta(todos, m) for m in v.closest],
+                furthest=[_etiqueta(todos, m) for m in v.furthest],
+                profile=v.profile,
+            )
+            for v in vecinos
+        ],
+        caveats=avisos,
+    )
+
+
+def _familias() -> dict[str, list[str]]:
+    """Metricas agrupadas por familia, segun la plantilla del grafico.
+
+    Se toma de `templates` y no de una lista aparte para que el plano de
+    scouting y el pizza chart hablen de lo mismo: seria confuso que el grafico
+    dijera "finalizacion" refiriendose a unas metricas y el plano a otras.
+    """
+    familias: dict[str, list[str]] = {}
+    for slice_ in OUTFIELD_TEMPLATE:
+        familias.setdefault(slice_.category, []).append(slice_.metric)
+    return familias
+
+
+def _etiqueta(percentiles: pd.DataFrame, metrica: str) -> str:
+    """Nombre legible de una metrica, para no devolver identificadores."""
+    fila = percentiles[percentiles["metric"] == metrica]
+    return str(fila.iloc[0]["label"]) if not fila.empty else metrica
 
 
 def _solo(fila: dict, modelo: type[BaseModel]) -> dict:

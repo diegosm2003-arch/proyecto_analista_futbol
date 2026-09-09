@@ -112,6 +112,12 @@ def cached_styles(season: str, league: str | None, n_styles: int) -> dict[str, A
     return _styles(data_version(), season, league, n_styles)
 
 
+def cached_similar(
+    player: str, season: str, team: str | None, basis: str, limit: int
+) -> dict[str, Any]:
+    return _similar(data_version(), player, season, team, basis, limit)
+
+
 # Las funciones cacheadas de verdad. El primer parametro es la version del dato:
 # no se usa dentro, solo forma parte de la clave. Van separadas de las de arriba
 # para que quien las llama no tenga que acordarse de pasarla.
@@ -162,3 +168,12 @@ def _market(version: str, player: str, season: str, team: str | None) -> dict[st
 @st.cache_data(ttl=TTL_SECONDS)
 def _styles(version: str, season: str, league: str | None, n_styles: int) -> dict[str, Any]:
     return get_client().team_styles(season=season, league=league, n_styles=n_styles)
+
+
+@st.cache_data(ttl=TTL_SECONDS)
+def _similar(
+    version: str, player: str, season: str, team: str | None, basis: str, limit: int
+) -> dict[str, Any]:
+    return get_client().player_similar(
+        player=player, season=season, team=team, basis=basis, limit=limit
+    )

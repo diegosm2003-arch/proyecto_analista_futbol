@@ -214,6 +214,35 @@ class PlayerMarket(BaseModel):
     caveats: list[str] = Field(default_factory=list)
 
 
+class SimilarPlayer(BaseModel):
+    """Un jugador con perfil parecido."""
+
+    league: str
+    team: str
+    player: str
+    minutes: int | None
+    similarity: float = Field(description="0 a 100. 100 seria un perfil identico")
+    closest: list[str] = Field(description="Metricas en las que mas se parecen")
+    furthest: list[str] = Field(description="Metricas en las que mas se separan")
+    profile: dict[str, float] = Field(
+        default_factory=dict,
+        description="Percentil medio por familia: finalizacion, creacion y construccion",
+    )
+
+
+class SimilarPlayers(BaseModel):
+    """Vecindario de un jugador dentro del espacio de percentiles."""
+
+    player: PlayerSummary
+    basis: Basis
+    population_group: str | None = Field(description="Grupo dentro del que se ha buscado")
+    profile: dict[str, float] = Field(
+        default_factory=dict, description="Perfil por familias del jugador de referencia"
+    )
+    neighbours: list[SimilarPlayer]
+    caveats: list[str] = Field(default_factory=list)
+
+
 class TeamStyle(BaseModel):
     """Estilo asignado a un equipo."""
 
@@ -222,9 +251,14 @@ class TeamStyle(BaseModel):
     team: str
     style: str
     cluster: int
-    possession: float | None
-    ppda: float | None = Field(description="Aproximada: no comparable con otras fuentes")
-    pressing_height: float | None = Field(description="Cuota de entradas en campo rival")
+    ppda: float | None = Field(
+        description="Pases del rival por accion defensiva. Mas bajo, mas presion"
+    )
+    territory: float | None = Field(
+        description="Llegadas a zona de remate por partido: cuanto campo pisa de verdad"
+    )
+    chance_creation: float | None = Field(description="npxG generado por partido")
+    chance_prevention: float | None = Field(description="npxG concedido por partido")
 
 
 class StyleReport(BaseModel):

@@ -1,4 +1,9 @@
-"""Vista de equipos: mapa de estilos de juego."""
+"""Vista de equipos: mapa de estilos de juego.
+
+Los filtros van arriba, igual que en la vista de jugadores: son lo que define lo
+que se esta mirando y se cambian constantemente, asi que van en la misma linea
+de vision que el resultado.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,7 @@ import streamlit as st
 from futbol_front import charts, presentation
 from futbol_front.client import ApiError
 from futbol_front.state import cached_catalog, cached_styles
+from futbol_front.theme import Palette, apply
 
 # Por debajo de este valor la particion es debil. No invalida el analisis: los
 # estilos de juego forman un continuo y no grupos separados.
@@ -15,19 +21,15 @@ WEAK_SILHOUETTE = 0.25
 
 
 def render() -> None:
-    st.title("Estilo de juego")
-    st.caption(
-        "Los equipos se agrupan por como juegan, no por lo bien que juegan. "
-        "El clustering usa todas las ligas cargadas y el filtro se aplica despues."
-    )
-
     try:
         catalogo = cached_catalog()
     except ApiError as error:
+        apply(None)
         st.error(f"No se ha podido leer el catalogo: {error}")
         return
 
     if not catalogo["seasons"]:
+        apply(None)
         st.warning(
             "No hay datos cargados todavia. Lanza el ETL: "
             "`docker compose --profile etl run --rm etl`"
@@ -35,6 +37,9 @@ def render() -> None:
         return
 
     temporada, liga, n_estilos = _filtros(catalogo)
+    # El tema se aplica despues de leer los filtros: el acento depende de la
+    # liga elegida.
+    paleta = apply(liga)
 
     try:
         informe = cached_styles(season=temporada, league=liga, n_styles=n_estilos)
@@ -46,24 +51,70 @@ def render() -> None:
         st.info("No hay equipos que mostrar con estos filtros.")
         return
 
-    _calidad(informe)
-    _mapa(informe, temporada)
+    mapa, panel = st.columns([3, 2], gap="large")
+    with mapa:
+        _mapa(informe, temporada, paleta)
+    with panel:
+        _panel(informe)
+
     _tabla(informe)
 
 
 def _filtros(catalogo: dict) -> tuple[str, str | None, int]:
-    with st.sidebar:
-        st.header("Filtros")
+    """Cinta de filtros en la parte superior."""
+    st.markdown('<div class="barra-filtros">', unsafe_allow_html=True)
+    temporada_c, liga_c, estilos_c = st.columns([1, 2, 2])
+    with temporada_c:
         temporada = st.selectbox(
             "Temporada", catalogo["seasons"], index=len(catalogo["seasons"]) - 1
         )
+    with liga_c:
         liga = st.selectbox("Liga", ["Todas las Big 5", *catalogo["leagues"]])
+    with estilos_c:
         n_estilos = st.slider("Numero de estilos", min_value=2, max_value=10, value=5)
-        st.caption(
-            "Los estilos no estan definidos de antemano: cada grupo se describe "
-            "por sus dos rasgos mas extremos."
-        )
+    st.caption(
+        "Los equipos se agrupan por como juegan, no por lo bien que juegan. Los estilos "
+        "no estan definidos de antemano: cada grupo se describe por sus dos rasgos mas "
+        "extremos. El clustering usa todas las ligas y el filtro se aplica despues."
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
     return temporada, (None if liga == "Todas las Big 5" else liga), n_estilos
+
+
+def _panel(informe: dict) -> None:
+    """Lectura del mapa, al lado del mapa.
+
+    Los estilos y sus advertencias se leen A LA VEZ que el grafico: enterarse de
+    que la particion es debil despues de haber interpretado los grupos llega
+    tarde, la conclusion ya esta sacada.
+    """
+    _calidad(informe)
+
+    por_estilo: dict[str, list[str]] = {}
+    for equipo in informe["teams"]:
+        por_estilo.setdefault(equipo["style"], []).append(equipo["team"])
+
+    st.markdown("###### Estilos encontrados")
+    for estilo, nombres in sorted(por_estilo.items()):
+        visibles = ", ".join(sorted(nombres)[:6])
+        resto = " y otros" if len(nombres) > 6 else ""
+        st.markdown(
+            '<div class="panel-detalle">'
+            f'<div class="titulo">{estilo} &middot; {len(nombres)} equipos</div>'
+            f'<div class="valor">{visibles}{resto}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    with st.popover("Como leer el mapa", width="stretch"):
+        st.markdown(
+            "El eje vertical esta **invertido**: una PPDA baja significa presion alta, "
+            "asi que los equipos mas agresivos quedan arriba."
+        )
+        st.markdown(
+            "La **PPDA es aproximada**: se calcula sobre todo el campo porque la fuente "
+            "no publica el pase del rival por zonas. Ordena bien a los equipos, pero no "
+            "es comparable con la PPDA de otras fuentes."
+        )
 
 
 def _calidad(informe: dict) -> None:
@@ -79,25 +130,20 @@ def _calidad(informe: dict) -> None:
         )
 
 
-def _mapa(informe: dict, temporada: str) -> None:
+def _mapa(informe: dict, temporada: str, paleta: Palette) -> None:
     datos = presentation.prepare_style_map(informe)
     if not len(datos):
-        st.info("Ningun equipo tiene posesion y presion calculables.")
+        st.info("Ningun equipo tiene territorio y presion calculables.")
         return
 
-    figura = charts.style_map(datos, f"Estilos de juego - {temporada}")
-    st.pyplot(figura)
+    figura = charts.style_map(datos, f"Estilos de juego - {temporada}", paleta)
+    st.pyplot(figura, width="content")
     st.download_button(
         "Descargar mapa (PNG)",
         data=charts.to_png(figura),
         file_name=presentation.chart_filename("estilos", temporada),
         mime="image/png",
         icon=":material/download:",
-    )
-    st.caption(
-        "La PPDA es aproximada: se calcula sobre todo el campo porque FBref no "
-        "publica el pase del rival por zonas. Ordena bien a los equipos, pero no "
-        "es comparable con la PPDA de otras fuentes."
     )
 
 
@@ -111,9 +157,10 @@ def _tabla(informe: dict) -> None:
             "team": "Equipo",
             "league": "Liga",
             "style": "Estilo",
-            "possession": "Posesion (%)",
+            "territory": "Llegadas por partido",
             "ppda": "PPDA aprox.",
-            "pressing_height": "Entradas en campo rival",
+            "chance_creation": "npxG por partido",
+            "chance_prevention": "npxG concedido",
         }
     )
     columnas = [
@@ -122,9 +169,10 @@ def _tabla(informe: dict) -> None:
             "Equipo",
             "Liga",
             "Estilo",
-            "Posesion (%)",
+            "Llegadas por partido",
             "PPDA aprox.",
-            "Entradas en campo rival",
+            "npxG por partido",
+            "npxG concedido",
         )
         if columna in filas
     ]

@@ -474,12 +474,60 @@ jugador vale cero en ella.
 Todos los graficos se **descargan en PNG**, para poder publicarlos sin recurrir
 a una captura de pantalla.
 
-**Estilo de equipo.** Mapa de posesion frente a presion, coloreado por cluster.
+**Estilo de equipo.** Mapa de **territorio frente a presion**, coloreado por
+cluster. El eje horizontal es cuanto campo pisa un equipo de verdad —llegadas a
+zona de remate por partido— y no la posesion, que Understat no publica. Es
+ademas un plano mas informativo: acumular pases y pisar el area rival no son lo
+mismo, y hay equipos que hacen lo primero sin lo segundo.
 El eje vertical va invertido porque una PPDA baja significa presion alta, y
 dejarlo sin invertir situaria a los equipos mas agresivos abajo.
 
 **Como leerlo.** Que es un percentil, por que la poblacion son las Big 5 y las
 tres advertencias que mas se malinterpretan.
+
+### Como esta organizada
+
+Se entra por una **portada** donde se elige ambito —jugadores o equipos— y se
+dice con que datos se esta trabajando, antes de que nadie lea un percentil sin
+saber contra quien esta calculado. En las pantallas de trabajo esa explicacion
+estorbaria; ahi es lo primero que se lee.
+
+Dentro, **los filtros van arriba**. Son lo que define lo que se esta mirando y
+se cambian constantemente: tenerlos en la misma linea de vision que el resultado
+evita el salto de ojo a un lateral que el resto del tiempo esta vacio. La barra
+lateral queda para lo que se consulta de vez en cuando: de que carga vienen los
+datos.
+
+**El tema cambia con la liga.** No es decoracion: un analista alterna entre
+competiciones y el acento le dice de un vistazo en cual esta. Cambia el color,
+nunca la disposicion, para que dos capturas de ligas distintas sigan siendo
+comparables.
+
+**El grafico y su lectura van uno al lado del otro.** El pizza chart ensena ocho
+ejes a la vez y no dice por donde empezar; el panel de la derecha responde a eso
+sin obligar a bajar. Por eso el grafico se dibuja mas pequeno de lo habitual:
+caben los dos, pero solo si el circulo no ocupa la pantalla entera.
+
+### Jugadores similares
+
+Debajo del perfil, quien mas juega asi dentro de su mismo grupo posicional. Es
+la pregunta con la que sigue un scout despues de ver un perfil que le gusta.
+
+Se compara el **vector de percentiles**, no los valores por 90: cada metrica
+tiene su escala y con valores crudos la distancia la mandaria la de numeros mas
+grandes. La distancia es euclidea y no coseno a proposito, porque el coseno mira
+la forma del perfil e ignora el nivel: un delantero del percentil 95 en todo
+saldria identico a uno del percentil 30 en todo, que es justo lo contrario de lo
+que un scout necesita.
+
+Dos graficos, porque responden a cosas distintas. Las **barras** dicen *cuanto*
+se parecen; el **plano** dice *por donde*. Dos jugadores con el mismo porcentaje
+pueden estar uno arriba y otro a la derecha, y esa diferencia lo es todo.
+
+Solo entran las metricas de aportacion. Las tarjetas quedan fuera porque casi
+ningun futbolista ve una roja en una temporada: ese eje daba a toda la poblacion
+por identica e inflaba el parecido de todos, y ademas salia como explicacion
+—"se parecen en tarjetas rojas"— tapando lo que de verdad los acercaba.
 
 ### Donde se sale de lo normal
 

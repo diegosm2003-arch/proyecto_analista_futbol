@@ -110,6 +110,20 @@ class ApiClient:
         ruta = f"/players/{quote(player, safe='')}/market"
         return self._get(ruta, params={"season": season, "team": team})
 
+    def player_similar(
+        self,
+        player: str,
+        season: str,
+        team: str | None = None,
+        basis: str = "per90",
+        limit: int = 6,
+    ) -> dict[str, Any]:
+        """Jugadores con un perfil parecido."""
+        ruta = f"/players/{quote(player, safe='')}/similar"
+        return self._get(
+            ruta, params={"season": season, "team": team, "basis": basis, "limit": limit}
+        )
+
     # --- Equipos ----------------------------------------------------------
 
     def team_styles(

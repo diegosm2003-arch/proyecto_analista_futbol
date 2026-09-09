@@ -93,10 +93,10 @@ def test_un_perfil_vacio_da_un_grafico_vacio() -> None:
 # --- Mapa de estilos --------------------------------------------------------
 
 
-def _equipo(nombre: str, possession: float | None, ppda: float | None) -> dict[str, Any]:
+def _equipo(nombre: str, territory: float | None, ppda: float | None) -> dict[str, Any]:
     return {
         "team": nombre,
-        "possession": possession,
+        "territory": territory,
         "ppda": ppda,
         "style": "dominio del balon",
         "cluster": 1,
@@ -104,19 +104,21 @@ def _equipo(nombre: str, possession: float | None, ppda: float | None) -> dict[s
 
 
 def test_el_mapa_recoge_a_los_equipos_completos() -> None:
-    informe = {"teams": [_equipo("Girona", 55.0, 9.0), _equipo("Getafe", 42.0, 14.0)]}
+    # Los ejes son territorio y presion, no posesion: Understat no publica
+    # posesion, y pedirla devolvia nulos que dejaban el mapa vacio sin error.
+    informe = {"teams": [_equipo("Girona", 12.5, 9.0), _equipo("Getafe", 7.2, 14.0)]}
 
     datos = prepare_style_map(informe)
 
     assert datos.teams == ["Girona", "Getafe"]
-    assert datos.possession == [55.0, 42.0]
+    assert datos.territory == [12.5, 7.2]
     assert datos.ppda == [9.0, 14.0]
 
 
 def test_un_equipo_sin_ejes_se_descarta_en_lugar_de_ir_al_cero() -> None:
     # Pintarlo en el origen afirmaria que no presiona nada, que es una lectura
     # distinta de "no lo sabemos".
-    informe = {"teams": [_equipo("Girona", 55.0, 9.0), _equipo("Sin datos", None, 12.0)]}
+    informe = {"teams": [_equipo("Girona", 12.5, 9.0), _equipo("Sin datos", None, 12.0)]}
 
     datos = prepare_style_map(informe)
 
