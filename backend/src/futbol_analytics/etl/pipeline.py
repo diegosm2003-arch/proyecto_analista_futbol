@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from futbol_analytics.config import BIG_5_LEAGUES, get_settings
 from futbol_analytics.db import create_schema, get_engine, player_season, team_season
-from futbol_analytics.etl import extract, load, transform
+from futbol_analytics.etl import extract, load, transform, understat_source
 from futbol_analytics.metrics import PLAYER_METRICS, TEAM_METRICS, stat_types
 
 if TYPE_CHECKING:
@@ -112,7 +112,9 @@ def _prepare_players(
     frames = extract.read_player_stats(
         stat_types(PLAYER_METRICS), leagues, seasons, use_cache=use_cache
     )
-    return transform.build_player_frame(frames, PLAYER_METRICS)
+    # La familia xG viene de Understat: FBref sirve vacias sus tablas avanzadas.
+    understat = understat_source.read_player_season_stats(leagues, seasons)
+    return transform.build_player_frame(frames, PLAYER_METRICS, understat=understat)
 
 
 def _prepare_teams(

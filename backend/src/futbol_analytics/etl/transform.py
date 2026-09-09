@@ -17,7 +17,7 @@ import re
 
 import pandas as pd
 
-from futbol_analytics.metrics import Metric, metrics_by_stat_type
+from futbol_analytics.metrics import Metric, metrics_by_stat_type, metrics_from
 from futbol_analytics.positions import is_hybrid, primary_position
 
 logger = logging.getLogger(__name__)
@@ -90,13 +90,14 @@ def select_metrics(
     frame: pd.DataFrame,
     metrics: tuple[Metric, ...],
     stat_type: str,
+    source: str = "fbref",
 ) -> pd.DataFrame:
     """Extrae y renombra las metricas de un `stat_type` a nombres canonicos.
 
     Las metricas opcionales que falten se crean vacias; si falta una obligatoria
     se lanza `MissingColumnsError`.
     """
-    wanted = metrics_by_stat_type(metrics, stat_type)
+    wanted = metrics_by_stat_type(metrics_from(metrics, source), stat_type)
     if not wanted:
         return pd.DataFrame(index=frame.index)
 
@@ -203,6 +204,7 @@ def add_identity(frame: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
 def build_player_frame(
     frames: dict[str, pd.DataFrame],
     metrics: tuple[Metric, ...],
+    understat: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Convierte las tablas crudas de FBref en filas listas para `player_season`.
 

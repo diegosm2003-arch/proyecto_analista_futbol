@@ -15,6 +15,7 @@ from futbol_analytics.metrics import (
     Metric,
     metrics_by_stat_type,
     metrics_for_position,
+    metrics_from,
     stat_types,
 )
 
@@ -56,11 +57,32 @@ def test_los_minutos_estan_en_el_catalogo_y_no_se_normalizan() -> None:
     assert minutos.dtype == "int"
 
 
-def test_stat_types_no_repite_y_cubre_el_catalogo() -> None:
-    tipos = stat_types(PLAYER_METRICS)
+def test_stat_types_no_repite_y_cubre_cada_fuente() -> None:
+    # El catalogo tiene dos fuentes: FBref sirve vacias sus tablas avanzadas, asi
+    # que la familia xG viene de Understat. Cada una se descarga por su lado.
+    for fuente in ("fbref", "understat"):
+        tipos = stat_types(PLAYER_METRICS, fuente)
+        esperados = {m.stat_type for m in PLAYER_METRICS if m.source == fuente}
 
-    assert len(tipos) == len(set(tipos))
-    assert set(tipos) == {metric.stat_type for metric in PLAYER_METRICS}
+        assert len(tipos) == len(set(tipos)), fuente
+        assert set(tipos) == esperados, fuente
+
+
+def test_la_familia_xg_viene_de_understat() -> None:
+    # FBref publica las columnas de xG pero sin ningun valor dentro, comprobado
+    # en 2023/24, 2024/25 y 2025/26. Sin Understat no habria analisis moderno.
+    de_understat = {m.name for m in metrics_from(PLAYER_METRICS, "understat")}
+
+    assert {"us_xg", "us_npxg", "us_xa", "xg_chain", "xg_buildup"} <= de_understat
+
+
+def test_xg_buildup_aisla_a_quien_construye_sin_finalizar() -> None:
+    # Es la metrica mas util del catalogo para descubrir organizadores: descuenta
+    # el tiro y la asistencia, asi que solo queda la participacion previa.
+    buildup = next(m for m in PLAYER_METRICS if m.name == "xg_buildup")
+
+    assert buildup.source == "understat"
+    assert buildup.per90 is True
 
 
 def test_metrics_by_stat_type_filtra_por_origen() -> None:

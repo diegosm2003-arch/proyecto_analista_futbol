@@ -119,8 +119,19 @@ def read_player_stats(
     reader = _fbref(leagues or settings.leagues, temporadas, no_cache=no_cache)
 
     ligas = leagues or settings.leagues
+    # Se descartan las tablas que FBref sirve vacias: pedirlas gasta peticiones
+    # contra un sitio limitado a una cada 7 segundos y solo consigue disparar la
+    # guarda de completitud.
+    utiles = tuple(st for st in stat_types if st in fbref_pages.SERVED_WITH_DATA)
+    descartadas = [st for st in stat_types if st not in fbref_pages.SERVED_WITH_DATA]
+    if descartadas:
+        logger.warning(
+            "Tablas omitidas porque FBref las sirve sin datos",
+            extra={"tablas": descartadas},
+        )
+
     frames: dict[str, pd.DataFrame] = {}
-    for stat_type in stat_types:
+    for stat_type in utiles:
         logger.info("Descargando tabla de jugadores", extra={"stat_type": stat_type})
         # Se leen las paginas propias de cada tabla y no la de la competicion:
         # esa solo trae cinco tablas de equipo, sin pases progresivos, toques
@@ -156,8 +167,19 @@ def read_team_stats(
     )
 
     ligas = leagues or settings.leagues
+    # Se descartan las tablas que FBref sirve vacias: pedirlas gasta peticiones
+    # contra un sitio limitado a una cada 7 segundos y solo consigue disparar la
+    # guarda de completitud.
+    utiles = tuple(st for st in stat_types if st in fbref_pages.SERVED_WITH_DATA)
+    descartadas = [st for st in stat_types if st not in fbref_pages.SERVED_WITH_DATA]
+    if descartadas:
+        logger.warning(
+            "Tablas omitidas porque FBref las sirve sin datos",
+            extra={"tablas": descartadas},
+        )
+
     frames: dict[str, pd.DataFrame] = {}
-    for stat_type in stat_types:
+    for stat_type in utiles:
         logger.info(
             "Descargando tabla de equipos",
             extra={"stat_type": stat_type, "perspectiva": "against" if opponent else "for"},

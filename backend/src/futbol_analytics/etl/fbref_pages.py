@@ -84,6 +84,17 @@ TABLE_IDS: dict[str, str] = {
 MIN_FILL_RATE = 0.5
 
 
+# Tablas que FBref sirve CON datos. Las avanzadas (passing, possession, defense,
+# gca) devuelven la tabla completa de jugadores con todas las celdas de
+# estadisticas vacias: comprobado en 2023/24, 2024/25 y 2025/26, cero valores
+# numericos de 1.314 celdas. No es un problema de captura.
+#
+# Se pide solo lo que tiene datos para no gastar peticiones ni disparar la
+# guarda de completitud en cada carga. Si FBref las restaura, basta con anadir
+# el nombre a esta tupla.
+SERVED_WITH_DATA: tuple[str, ...] = ("standard", "shooting", "misc", "keeper", "keeper_adv")
+
+
 class PageNotAvailableError(RuntimeError):
     """FBref no ha servido la tabla de jugadores de esa pagina."""
 

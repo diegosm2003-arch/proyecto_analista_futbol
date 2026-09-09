@@ -58,6 +58,9 @@ class Metric:
         required: Si su ausencia en el scraping debe considerarse un error. Las
             opcionales son metricas que FBref ha ido anadiendo y que pueden no
             existir en temporadas antiguas.
+        source: De donde sale. `fbref` para las tablas de FBref, `understat`
+            para las de Understat. Hizo falta cuando quedo claro que FBref sirve
+            vacias sus tablas avanzadas: la familia xG viene de Understat.
         possession_sensitive: Si el volumen de la metrica depende de cuanto
             tiempo pasa el equipo sin balon. Un pivote de un equipo que domina
             tiene menos ocasiones de entrar que uno de un equipo replegado, asi
@@ -74,6 +77,7 @@ class Metric:
     higher_is_better: bool | None = True
     per90: bool = True
     required: bool = True
+    source: str = "fbref"
     possession_sensitive: bool = False
 
 
@@ -218,6 +222,29 @@ PLAYER_METRICS: tuple[Metric, ...] = (
     # para mas de lo esperado dado el tiro que recibe.
     Metric("post_shot_xg", "keeper_adv", "expected_psxg", "PSxG",
            positions=("GK",), higher_is_better=None, required=False),
+
+    # --- Understat. FBref sirve vacias sus tablas avanzadas, asi que la familia
+    #     xG viene de aqui. Son metricas de modelo, no de conteo: dicen cuanto
+    #     valia una ocasion, no cuantas hubo.
+    Metric("us_xg", "player_season", "xg", "xG (Understat)",
+           positions=OUTFIELD, source="understat"),
+    Metric("us_npxg", "player_season", "np_xg", "xG sin penaltis (Understat)",
+           positions=OUTFIELD, source="understat"),
+    Metric("us_xa", "player_season", "xa", "xA (Understat)",
+           positions=OUTFIELD, source="understat"),
+    Metric("us_shots", "player_season", "shots", "Tiros (Understat)",
+           positions=OUTFIELD, source="understat"),
+    Metric("us_key_passes", "player_season", "key_passes", "Pases clave (Understat)",
+           positions=OUTFIELD, source="understat"),
+    # xGChain reparte el xG de una jugada entre todos los que la tocaron.
+    # Premia estar en las posesiones que acaban en tiro, se remate o no.
+    Metric("xg_chain", "player_season", "xg_chain", "xGChain",
+           positions=OUTFIELD, source="understat"),
+    # xGBuildup es xGChain quitando el tiro y la asistencia. Aisla a quien
+    # construye sin finalizar: es la metrica que descubre organizadores que
+    # ninguna estadistica de conteo refleja.
+    Metric("xg_buildup", "player_season", "xg_buildup", "xGBuildup",
+           positions=OUTFIELD, source="understat"),
 )
 # fmt: on
 
@@ -265,10 +292,15 @@ TEAM_METRICS: tuple[Metric, ...] = (
 # fmt: on
 
 
-def stat_types(metrics: tuple[Metric, ...]) -> tuple[str, ...]:
-    """Tablas de FBref que hay que descargar para cubrir el catalogo."""
+def metrics_from(metrics: tuple[Metric, ...], source: str) -> tuple[Metric, ...]:
+    """Metricas que vienen de una fuente concreta."""
+    return tuple(metric for metric in metrics if metric.source == source)
+
+
+def stat_types(metrics: tuple[Metric, ...], source: str = "fbref") -> tuple[str, ...]:
+    """Tablas que hay que descargar de una fuente para cubrir el catalogo."""
     seen: dict[str, None] = {}
-    for metric in metrics:
+    for metric in metrics_from(metrics, source):
         seen.setdefault(metric.stat_type, None)
     return tuple(seen)
 
