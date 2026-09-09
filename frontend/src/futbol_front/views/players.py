@@ -39,7 +39,10 @@ def render() -> None:
         return
 
     if not catalogo["seasons"]:
-        st.warning("No hay datos cargados. Ejecuta el ETL en el equipo personal.")
+        st.warning(
+            "No hay datos cargados todavia. Lanza el ETL: "
+            "`docker compose --profile etl run --rm etl`"
+        )
         return
 
     filtros = _filtros(catalogo)

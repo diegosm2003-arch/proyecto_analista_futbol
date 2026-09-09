@@ -64,7 +64,16 @@ No construir una capa antes de que exista aquello de lo que depende.
 
 ## Contexto de trabajo en dos equipos
 
-El código se escribe en dos ordenadores (trabajo y personal) sincronizados vía un repo privado de GitHub. El despliegue y la ejecución (Docker, Ollama, carga de datos) ocurren SOLO en el equipo personal. En el equipo del trabajo solo se edita código que no requiere ejecución (definiciones, lógica pura, tests unitarios, documentación).
+El código se escribe en dos ordenadores (trabajo y personal) sincronizados vía un repo privado de GitHub. **Los dos ejecutan Docker**, así que la plataforma entera (ETL, PostgreSQL, API, interfaz) se puede levantar en cualquiera de los dos.
+
+**Lo que Git sincroniza es solo el código.** No viajan entre equipos:
+
+- **La base de datos**: `pgdata` es un volumen Docker local a cada máquina.
+- **El caché de scraping** (`./data`) y el `.env`, ambos ignorados.
+
+Consecuencia práctica: cada equipo tiene su propia copia de los datos, y hay que cargarlos en cada uno o mover un volcado a mano. Dos bases cargadas en días distintos pueden diferir, porque FBref corrige datos a posteriori.
+
+**El planificador (`--profile scheduler`) debe correr en un solo equipo.** El candado sobre `etl_run` vive dentro de la base de datos, así que no protege entre máquinas: dos planificadores activos scrapearían FBref el doble sin traer nada nuevo, y FBref limita a una petición cada 7 segundos.
 
 ## Qué hacer y qué no
 

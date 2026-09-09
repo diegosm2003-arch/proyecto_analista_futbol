@@ -165,6 +165,10 @@ segundos, asi que cargar a diario seria castigarlo para nada.
 | `SCHEDULE_TIMEZONE` | `Europe/Madrid` | Para que "el martes por la manana" no dependa del cambio de hora |
 | `ETL_RUN_ON_START` | `false` | Cargar al levantar el contenedor, sin esperar al martes |
 
+> **Levantalo en un solo equipo.** El candado que impide dos cargas simultaneas
+> vive dentro de la base de datos, asi que no protege entre maquinas: dos
+> planificadores activos scrapearian FBref el doble sin traer nada nuevo.
+
 > **Los dias van por nombre, no por numero.** APScheduler numera `0 = lunes` y
 > el cron de toda la vida usa `0 = domingo`. Escrito `0 6 * * 2,4` la carga
 > caeria en miercoles y viernes, y el viernes es *antes* de la jornada. Hay un
@@ -391,7 +395,7 @@ anadiendo las tablas avanzadas de portero al ETL.
 
 ## Puesta en marcha
 
-Requiere Docker. Solo se ejecuta en el equipo personal.
+Requiere Docker.
 
 ```bash
 cp .env.example .env        # y ajustar POSTGRES_PASSWORD
@@ -400,6 +404,22 @@ docker compose --profile etl run --rm etl   # ejecuta el ETL y termina
 docker compose --profile scheduler up -d    # carga programada, martes y jueves
 docker compose --profile chat up -d ollama  # opcional, fase final
 ```
+
+### Trabajar en dos equipos
+
+El repositorio se edita en dos ordenadores y los dos pueden levantar la
+plataforma. **Git sincroniza el codigo, no los datos**: el volumen `pgdata` es
+local a cada maquina, y el cache de scraping (`./data`) y el `.env` estan
+ignorados.
+
+Dos consecuencias:
+
+- Hay que **cargar los datos en cada equipo**, o mover un volcado con
+  `pg_dump`. Dos bases cargadas en dias distintos pueden diferir, porque FBref
+  corrige datos a posteriori.
+- **El planificador debe correr en un solo equipo.** El candado sobre
+  `etl_run` vive en la base de datos y no protege entre maquinas: dos
+  planificadores activos scrapearian FBref el doble sin traer nada nuevo.
 
 - API: <http://localhost:8000/docs>
 - Interfaz: <http://localhost:8501>
