@@ -243,6 +243,28 @@ class SimilarPlayers(BaseModel):
     caveats: list[str] = Field(default_factory=list)
 
 
+class SquadPlayer(BaseModel):
+    """Un jugador de la plantilla, con lo que hace falta para planificar."""
+
+    player: str
+    age: int | None
+    position: str | None
+    market_value_eur: float | None
+
+
+class TeamCard(BaseModel):
+    """Un equipo tal y como se ensena en el navegador de la interfaz."""
+
+    league: str
+    season: str
+    team: str
+    squad_size: int = Field(description="Jugadores cargados de ese equipo")
+    crest_url: str | None = Field(
+        default=None, description="Escudo del club, si se ha cruzado con Transfermarkt"
+    )
+    market_value_eur: float | None = Field(default=None, description="Valor de plantilla")
+
+
 class TeamStyle(BaseModel):
     """Estilo asignado a un equipo."""
 

@@ -487,6 +487,19 @@ tres advertencias que mas se malinterpretan.
 
 ### Como esta organizada
 
+Se navega en tres pasos —**liga, equipo y jugador**— y no con un buscador de
+doscientos nombres. La diferencia no es estetica: un buscador exige saber a
+quien buscas, y buena parte del trabajo de un analista es lo contrario, ver que
+hay en un equipo antes de fijarse en nadie. Los escudos y los logos de
+competicion salen de la misma fuente que el resto del dato de Transfermarkt, asi
+que los dos pasos tienen el mismo aspecto.
+
+El **tema base va en `.streamlit/config.toml`** y no solo en el CSS. Streamlit
+pinta sus propios controles antes de que llegue ningun estilo nuestro: sin esa
+base, la aplicacion salia con desplegables claros sobre fondo oscuro y textos
+oscuros sobre oscuro en la barra lateral. El CSS se limita a lo que el tema base
+no puede hacer, que es el acento por liga.
+
 Se entra por una **portada** donde se elige ambito —jugadores o equipos— y se
 dice con que datos se esta trabajando, antes de que nadie lea un percentil sin
 saber contra quien esta calculado. En las pantallas de trabajo esa explicacion

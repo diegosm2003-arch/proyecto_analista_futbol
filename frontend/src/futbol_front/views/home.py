@@ -55,46 +55,89 @@ def render() -> None:
         unsafe_allow_html=True,
     )
 
-    izquierda, derecha = st.columns(2, gap="large")
+    # Estrechas y altas, con el icono arriba: una ficha ancha y baja se lee como
+    # una barra de navegacion, no como una eleccion.
+    _, izquierda, derecha, _ = st.columns([1, 2, 2, 1], gap="large")
 
-    with izquierda:
-        st.markdown(
-            """
-            <div class="tarjeta">
-              <h3>Jugadores</h3>
-              <p>Perfil de percentiles, rol asignado, valor de mercado y carrera.
-              Y quien mas juega asi en las Big 5.</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.button(
-            "Analizar jugadores",
-            type="primary",
-            width="stretch",
-            on_click=ir_a,
-            args=(JUGADORES,),
-        )
-
-    with derecha:
-        st.markdown(
-            """
-            <div class="tarjeta">
-              <h3>Equipos</h3>
-              <p>Estilo de juego por posesion y altura de presion, con los equipos
-              agrupados por como compiten y no por lo que ganan.</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.button(
-            "Analizar equipos",
-            width="stretch",
-            on_click=ir_a,
-            args=(EQUIPOS,),
-        )
+    _tarjeta(
+        izquierda,
+        icono=ICONO_JUGADOR,
+        titulo="Jugadores",
+        texto=(
+            "Perfil de percentiles, rol asignado, valor de mercado y carrera. "
+            "Y quien mas juega asi en las Big 5."
+        ),
+        etiqueta="Analizar jugadores",
+        destino=JUGADORES,
+        principal=True,
+    )
+    _tarjeta(
+        derecha,
+        icono=ICONO_EQUIPO,
+        titulo="Equipos",
+        texto=(
+            "Estilo de juego por territorio y altura de presion, con los equipos "
+            "agrupados por como compiten y no por lo que ganan."
+        ),
+        etiqueta="Analizar equipos",
+        destino=EQUIPOS,
+        principal=False,
+    )
 
     _que_hay_cargado()
+
+
+# Iconos en SVG y no con la fuente de iconos de Streamlit: dentro de un bloque
+# de HTML propio no hay garantia de que esa fuente este cargada, y un icono que
+# no carga deja un nombre en ingles suelto en mitad de la tarjeta. Un SVG en
+# linea no depende de nada y hereda el color del tema.
+ICONO_JUGADOR = (
+    '<svg viewBox="0 0 24 24" width="56" height="56" fill="none" '
+    'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" '
+    'stroke-linejoin="round">'
+    '<circle cx="13.5" cy="4" r="2"/>'
+    '<path d="M12.5 21l-1-6 3-2.5-1-4.5"/>'
+    '<path d="M13.5 8l3.5 2 2.5-1"/>'
+    '<path d="M11.5 8L8 10l-2 4"/>'
+    '<path d="M13.5 15l3 6"/>'
+    "</svg>"
+)
+
+ICONO_EQUIPO = (
+    '<svg viewBox="0 0 24 24" width="56" height="56" fill="none" '
+    'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" '
+    'stroke-linejoin="round">'
+    '<path d="M12 2.5l7.5 2.5v6c0 4.6-3.1 8.6-7.5 10-4.4-1.4-7.5-5.4-7.5-10v-6z"/>'
+    '<path d="M12 7.5l1.6 3.2 3.4.5-2.5 2.4.6 3.4-3.1-1.6-3.1 1.6.6-3.4-2.5-2.4 3.4-.5z"/>'
+    "</svg>"
+)
+
+
+def _tarjeta(
+    columna,
+    icono: str,
+    titulo: str,
+    texto: str,
+    etiqueta: str,
+    destino: str,
+    principal: bool,
+) -> None:
+    """Una de las dos puertas de entrada."""
+    with columna, st.container(border=True):
+        st.markdown(
+            f'<div class="tarjeta-ambito">'
+            f'<div class="icono">{icono}</div>'
+            f"<h3>{titulo}</h3><p>{texto}</p>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.button(
+            etiqueta,
+            type="primary" if principal else "secondary",
+            width="stretch",
+            on_click=ir_a,
+            args=(destino,),
+        )
 
 
 def _que_hay_cargado() -> None:

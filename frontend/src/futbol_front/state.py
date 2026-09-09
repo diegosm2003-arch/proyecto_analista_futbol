@@ -90,8 +90,9 @@ def cached_search(
     league: str | None,
     position_group: str | None,
     name: str | None,
+    team: str | None = None,
 ) -> list[dict[str, Any]]:
-    return _search(data_version(), season, league, position_group, name)
+    return _search(data_version(), season, league, position_group, name, team)
 
 
 def cached_profile(
@@ -110,6 +111,14 @@ def cached_market(player: str, season: str, team: str | None) -> dict[str, Any]:
 
 def cached_styles(season: str, league: str | None, n_styles: int) -> dict[str, Any]:
     return _styles(data_version(), season, league, n_styles)
+
+
+def cached_teams(season: str, league: str | None) -> list[dict[str, Any]]:
+    return _teams(data_version(), season, league)
+
+
+def cached_squad(team: str, season: str, league: str) -> list[dict[str, Any]]:
+    return _squad(data_version(), team, season, league)
 
 
 def cached_similar(
@@ -140,9 +149,10 @@ def _search(
     league: str | None,
     position_group: str | None,
     name: str | None,
+    team: str | None = None,
 ) -> list[dict[str, Any]]:
     return get_client().search_players(
-        season=season, league=league, position_group=position_group, name=name
+        season=season, league=league, team=team, position_group=position_group, name=name
     )
 
 
@@ -177,3 +187,13 @@ def _similar(
     return get_client().player_similar(
         player=player, season=season, team=team, basis=basis, limit=limit
     )
+
+
+@st.cache_data(ttl=TTL_SECONDS)
+def _teams(version: str, season: str, league: str | None) -> list[dict[str, Any]]:
+    return get_client().teams(season=season, league=league)
+
+
+@st.cache_data(ttl=TTL_SECONDS)
+def _squad(version: str, team: str, season: str, league: str) -> list[dict[str, Any]]:
+    return get_client().squad(team=team, season=season, league=league)

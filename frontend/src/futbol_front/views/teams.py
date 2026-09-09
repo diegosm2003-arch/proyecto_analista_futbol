@@ -14,6 +14,7 @@ from futbol_front import charts, presentation
 from futbol_front.client import ApiError
 from futbol_front.state import cached_catalog, cached_styles
 from futbol_front.theme import Palette, apply
+from futbol_front.views import browse
 
 # Por debajo de este valor la particion es debil. No invalida el analisis: los
 # estilos de juego forman un continuo y no grupos separados.
@@ -36,13 +37,29 @@ def render() -> None:
         )
         return
 
-    temporada, liga, n_estilos = _filtros(catalogo)
-    # El tema se aplica despues de leer los filtros: el acento depende de la
-    # liga elegida.
+    liga = browse.liga_actual()
     paleta = apply(liga)
+    browse.migas(paleta)
+
+    if liga is None:
+        browse.selector_de_liga(catalogo["leagues"], "Elige una liga")
+        st.divider()
+        st.caption(
+            "Tambien puedes ver las cinco a la vez: el clustering se calcula siempre "
+            "sobre todas y la liga solo filtra a quien se pinta."
+        )
+        st.button(
+            "Ver las cinco grandes juntas",
+            on_click=browse.elegir_liga,
+            args=(TODAS,),
+        )
+        return
+
+    temporada, n_estilos = _filtros(catalogo)
+    liga_filtro = None if liga == TODAS else liga
 
     try:
-        informe = cached_styles(season=temporada, league=liga, n_styles=n_estilos)
+        informe = cached_styles(season=temporada, league=liga_filtro, n_styles=n_estilos)
     except ApiError as error:
         st.error(str(error))
         return
@@ -60,25 +77,32 @@ def render() -> None:
     _tabla(informe)
 
 
-def _filtros(catalogo: dict) -> tuple[str, str | None, int]:
-    """Cinta de filtros en la parte superior."""
-    st.markdown('<div class="barra-filtros">', unsafe_allow_html=True)
-    temporada_c, liga_c, estilos_c = st.columns([1, 2, 2])
-    with temporada_c:
-        temporada = st.selectbox(
-            "Temporada", catalogo["seasons"], index=len(catalogo["seasons"]) - 1
+# Valor que representa "las cinco a la vez" dentro de la navegacion por liga.
+TODAS = "__todas__"
+
+
+def _filtros(catalogo: dict) -> tuple[str, int]:
+    """Cinta de filtros en la parte superior.
+
+    La liga ya la ha decidido la navegacion, asi que aqui solo quedan la
+    temporada y cuantos estilos se piden.
+    """
+    # Contenedor de verdad, no un <div> de markdown: Streamlit lo cierra en
+    # cuanto acaba el markdown y los widgets se quedaban fuera.
+    with st.container(border=True):
+        temporada_c, estilos_c = st.columns([1, 3])
+        with temporada_c:
+            temporada = st.selectbox(
+                "Temporada", catalogo["seasons"], index=len(catalogo["seasons"]) - 1
+            )
+        with estilos_c:
+            n_estilos = st.slider("Numero de estilos", min_value=2, max_value=12, value=6)
+        st.caption(
+            "Los equipos se agrupan por como juegan, no por lo bien que juegan. Los estilos "
+            "no estan definidos de antemano: cada grupo se describe por sus rasgos mas "
+            "extremos. El clustering usa todas las ligas y el filtro se aplica despues."
         )
-    with liga_c:
-        liga = st.selectbox("Liga", ["Todas las Big 5", *catalogo["leagues"]])
-    with estilos_c:
-        n_estilos = st.slider("Numero de estilos", min_value=2, max_value=10, value=5)
-    st.caption(
-        "Los equipos se agrupan por como juegan, no por lo bien que juegan. Los estilos "
-        "no estan definidos de antemano: cada grupo se describe por sus dos rasgos mas "
-        "extremos. El clustering usa todas las ligas y el filtro se aplica despues."
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-    return temporada, (None if liga == "Todas las Big 5" else liga), n_estilos
+    return temporada, n_estilos
 
 
 def _panel(informe: dict) -> None:

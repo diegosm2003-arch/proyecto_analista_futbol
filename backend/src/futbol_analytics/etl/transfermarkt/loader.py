@@ -21,6 +21,7 @@ from futbol_analytics.db.schema import (
     player_profile,
     player_season,
     player_transfers,
+    team_identity,
     team_market_value,
 )
 from futbol_analytics.etl.load import CHUNK_SIZE, upsert
@@ -108,6 +109,15 @@ def teams_of(engine: Engine, season: str, league: str | None = None) -> list[dic
         consulta = consulta.where(player_season.c.league == league)
     with engine.connect() as conexion:
         return [dict(fila) for fila in conexion.execute(consulta).mappings()]
+
+
+def load_team_identity(engine: Engine, rows: Sequence[dict]) -> int:
+    """Guarda con que club de Transfermarkt se ha cruzado cada equipo.
+
+    Sale gratis: el cruce ya se hace para descargar la plantilla, y guardarlo es
+    lo que permite ensenar el escudo sin volver a preguntar por el.
+    """
+    return upsert(engine, team_identity, rows)
 
 
 def season_players(

@@ -46,6 +46,7 @@ def search(
     season: str,
     data: DataAccessDep,
     league: str | None = None,
+    team: str | None = None,
     position_group: PositionGroup | None = None,
     role: str | None = None,
     name: str | None = Query(
@@ -59,6 +60,8 @@ def search(
 
     if league:
         jugadores = jugadores[jugadores["league"] == league]
+    if team:
+        jugadores = jugadores[jugadores["team"] == team]
     if position_group:
         jugadores = jugadores[jugadores["position_group"] == position_group]
     if role:

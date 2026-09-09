@@ -28,9 +28,12 @@ from futbol_front.state import (
     cached_profile,
     cached_search,
     cached_similar,
+    cached_squad,
+    cached_teams,
     cached_templates,
 )
 from futbol_front.theme import Palette, apply
+from futbol_front.views import browse
 
 BASES = {
     "Por 90 minutos": "per90",
@@ -65,10 +68,31 @@ def render() -> None:
         )
         return
 
-    filtros, base, poblacion = _barra_de_filtros(catalogo)
-    # El tema se aplica DESPUES de leer los filtros: el acento depende de la
-    # liga elegida, asi que hasta aqui no se sabe cual toca.
-    paleta = apply(filtros["league"])
+    temporada = _temporada(catalogo)
+    liga = browse.liga_actual()
+    # El tema se aplica en cuanto se sabe la liga: el acento acompana a la
+    # navegacion desde el primer paso, no solo dentro del analisis.
+    paleta = apply(liga)
+    browse.migas(paleta)
+
+    # Paso 1: la liga.
+    if liga is None:
+        browse.selector_de_liga(catalogo["leagues"], "Elige una liga")
+        return
+
+    # Paso 2: el equipo.
+    equipo = browse.equipo_actual()
+    if equipo is None:
+        try:
+            equipos = cached_teams(temporada, liga)
+        except ApiError as error:
+            st.error(str(error))
+            return
+        browse.selector_de_equipo(equipos, f"Equipos de {paleta.name}")
+        return
+
+    # Paso 3: la plantilla, ya con los filtros arriba.
+    filtros, base, poblacion = _barra_de_filtros(catalogo, temporada, liga, equipo)
 
     try:
         jugadores = cached_search(**filtros)
@@ -77,7 +101,7 @@ def render() -> None:
         return
 
     if not jugadores:
-        st.info("Ningun jugador cumple los filtros. Prueba a quitar el nombre o la posicion.")
+        st.info("Ningun jugador del equipo cumple los filtros. Prueba a quitar el nombre.")
         return
 
     seleccionado, rival = _seleccion(jugadores, paleta)
@@ -113,64 +137,80 @@ def render() -> None:
         _comparacion(perfil, perfil_rival, plantillas, paleta)
         return
 
-    rendimiento, mercado = st.tabs(["Rendimiento", "Mercado y carrera"])
+    rendimiento, mercado, plantel = st.tabs(["Rendimiento", "Mercado y carrera", "Plantilla"])
     with rendimiento:
         _perfil(perfil, plantillas, paleta)
         _similares(perfil, base, paleta)
     with mercado:
         _mercado(perfil["player"])
+    with plantel:
+        _plantel(temporada, liga, equipo, paleta)
 
 
 # --- Filtros ----------------------------------------------------------------
 
 
-def _barra_de_filtros(catalogo: dict) -> tuple[dict, str, str]:
+def _temporada(catalogo: dict) -> str:
+    """Temporada activa, elegida en la barra superior de la vista.
+
+    Se lee aparte de los demas filtros porque hace falta ya en el primer paso de
+    la navegacion, para saber que equipos hay cargados.
+    """
+    return st.session_state.get("temporada_activa") or catalogo["seasons"][-1]
+
+
+def _barra_de_filtros(
+    catalogo: dict, temporada: str, liga: str, equipo: str
+) -> tuple[dict, str, str]:
     """Cinta de filtros en la parte superior.
 
-    Devuelve los parametros de busqueda y las dos opciones que definen contra
-    quien se compara. Van juntos porque son la misma decision: que poblacion
-    estoy mirando.
+    La liga y el equipo ya estan decididos por la navegacion, asi que aqui solo
+    quedan los filtros que acotan dentro de la plantilla y las dos opciones que
+    definen contra quien se compara.
     """
-    st.markdown('<div class="barra-filtros">', unsafe_allow_html=True)
+    # Un contenedor de verdad y no un <div> de markdown: Streamlit cierra el div
+    # en cuanto termina el markdown, asi que los widgets quedaban fuera y lo que
+    # se veia era una franja vacia encima de los filtros.
+    with st.container(border=True):
+        temporada_c, posicion_c, nombre_c = st.columns([1, 1, 2])
+        with temporada_c:
+            temporada = st.selectbox(
+                "Temporada",
+                catalogo["seasons"],
+                index=catalogo["seasons"].index(temporada),
+                key="temporada_activa",
+            )
+        with posicion_c:
+            posicion = st.selectbox("Posicion", ["Todas", "GK", "DF", "MF", "FW"])
+        with nombre_c:
+            nombre = st.text_input("Nombre", placeholder="Busqueda parcial")
 
-    temporada_c, liga_c, posicion_c, nombre_c = st.columns([1, 2, 1, 2])
-    with temporada_c:
-        temporada = st.selectbox(
-            "Temporada", catalogo["seasons"], index=len(catalogo["seasons"]) - 1
-        )
-    with liga_c:
-        liga = st.selectbox("Liga", [TODAS_LAS_LIGAS, *catalogo["leagues"]])
-    with posicion_c:
-        posicion = st.selectbox("Posicion", ["Todas", "GK", "DF", "MF", "FW"])
-    with nombre_c:
-        nombre = st.text_input("Nombre", placeholder="Busqueda parcial")
+        base_c, poblacion_c = st.columns(2)
+        with base_c:
+            base = st.radio(
+                "Normalizacion",
+                list(BASES),
+                horizontal=True,
+                help=(
+                    "El ajuste por posesion corrige que un jugador de un equipo que "
+                    "domina tiene menos ocasiones de defender."
+                ),
+            )
+        with poblacion_c:
+            poblacion = st.radio(
+                "Comparar contra",
+                list(POBLACIONES),
+                horizontal=True,
+                help="El rol es mas preciso, pero la poblacion se reduce a un cuarto.",
+            )
 
-    base_c, poblacion_c = st.columns(2)
-    with base_c:
-        base = st.radio(
-            "Normalizacion",
-            list(BASES),
-            horizontal=True,
-            help=(
-                "El ajuste por posesion corrige que un jugador de un equipo que "
-                "domina tiene menos ocasiones de defender."
-            ),
-        )
-    with poblacion_c:
-        poblacion = st.radio(
-            "Comparar contra",
-            list(POBLACIONES),
-            horizontal=True,
-            help="El rol es mas preciso, pero la poblacion se reduce a un cuarto.",
-        )
-
-    _aviso_de_umbral(catalogo, temporada)
-    st.markdown("</div>", unsafe_allow_html=True)
+        _aviso_de_umbral(catalogo, temporada)
 
     return (
         {
             "season": temporada,
-            "league": None if liga == TODAS_LAS_LIGAS else liga,
+            "league": liga,
+            "team": equipo,
             "position_group": None if posicion == "Todas" else posicion,
             "name": nombre or None,
         },
@@ -531,13 +571,18 @@ def _mercado(ficha: dict) -> None:
     with curva:
         if tasaciones:
             st.markdown("###### Curva de valor")
+            # El eje va por FECHA y no por el orden de la tasacion. Con un indice
+            # del 1 al 16, dos jugadores con el mismo numero de tasaciones salian
+            # con curvas identicas de ancho aunque una cubriera diez anos y la
+            # otra dos, y no se veia cuando subio ni a que edad.
+            serie = pd.DataFrame(
+                {"Millones de euros": [(v["market_value_eur"] or 0) / 1e6 for v in tasaciones]},
+                index=pd.to_datetime([v["valuation_date"] for v in tasaciones]),
+            )
+            serie.index.name = "Fecha de tasacion"
             # La curva dice mas que la cifra: distingue al canterano en subida
             # del veterano en caida, aunque hoy valgan lo mismo.
-            st.line_chart(
-                {"Millones de euros": [(v["market_value_eur"] or 0) / 1e6 for v in tasaciones]},
-                x_label="Tasaciones, de la mas antigua a la mas reciente",
-                height=260,
-            )
+            st.line_chart(serie, height=260)
 
     fichajes = datos["transfers"]
     with carrera:
@@ -566,6 +611,82 @@ def _millones(valor: float | None) -> str:
     if valor is None:
         return "-"
     return f"{valor / 1e6:,.1f} M EUR".replace(",", ".")
+
+
+def _plantel(temporada: str, liga: str, equipo: str, paleta: Palette) -> None:
+    """Edad y valor de toda la plantilla, no solo del jugador elegido.
+
+    Responde a una pregunta que el perfil individual no puede responder: si el
+    patrimonio del club esta en gente que aun va a subir o en gente que ya solo
+    puede bajar, y si hay un agujero generacional entre los veteranos y la
+    cantera.
+    """
+    try:
+        jugadores = cached_squad(equipo, temporada, liga)
+    except ApiError as error:
+        st.error(str(error))
+        return
+
+    con_datos = [
+        (j["player"], j["age"], j["market_value_eur"])
+        for j in jugadores
+        if j["age"] is not None and j["market_value_eur"]
+    ]
+    if not con_datos:
+        st.info(
+            "Sin edad ni valor de mercado para esta plantilla. Lanza la carga de "
+            "Transfermarkt: `--profile transfermarkt ... --solo-equipos`."
+        )
+        return
+
+    grafico, panel = st.columns([3, 2], gap="large")
+
+    with grafico:
+        figura = charts.squad_age_value(con_datos, paleta)
+        st.pyplot(figura, width="content")
+
+    with panel:
+        edades = [e for _, e, _ in con_datos]
+        valores = [v for _, _, v in con_datos]
+        columnas = st.columns(2)
+        columnas[0].metric("Edad media", f"{sum(edades) / len(edades):.1f}")
+        columnas[1].metric("Valor total", _millones(sum(valores)))
+
+        jovenes = [j for j in con_datos if j[1] <= 23]
+        veteranos = [j for j in con_datos if j[1] >= 30]
+        st.markdown(
+            '<div class="panel-detalle">'
+            '<div class="titulo">Reparto por edad</div>'
+            f'<div class="valor">{len(jovenes)} de 23 o menos &middot; '
+            f"{len(veteranos)} de 30 o mas</div></div>",
+            unsafe_allow_html=True,
+        )
+        peso_joven = sum(v for _, e, v in con_datos if e <= 23) / sum(valores) * 100
+        st.markdown(
+            '<div class="panel-detalle">'
+            '<div class="titulo">Patrimonio en menores de 24</div>'
+            f'<div class="valor">{peso_joven:.0f} % del valor de la plantilla</div></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Un valor alto aqui suele significar que el club aun puede revalorizar; "
+            "uno bajo, que su patrimonio ya solo puede depreciarse."
+        )
+
+    with st.expander(f"Plantilla completa ({len(jugadores)} jugadores)"):
+        st.dataframe(
+            [
+                {
+                    "Jugador": j["player"],
+                    "Edad": j["age"],
+                    "Posicion": j["position"],
+                    "Valor": _millones(j["market_value_eur"]),
+                }
+                for j in sorted(jugadores, key=lambda x: x["market_value_eur"] or 0, reverse=True)
+            ],
+            hide_index=True,
+            width="stretch",
+        )
 
 
 # --- Utilidades -------------------------------------------------------------

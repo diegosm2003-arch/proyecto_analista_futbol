@@ -66,6 +66,19 @@ PALETTES: dict[str, Palette] = {
 }
 
 
+# Logo de cada competicion. La URL se construye con el identificador que usa
+# Transfermarkt, que es la misma fuente de la que salen los escudos de club: asi
+# los dos pasos del navegador tienen el mismo aspecto y no hay que mezclar
+# proveedores de imagenes.
+LEAGUE_LOGOS: dict[str, str] = {
+    "ESP-La Liga": "https://tmssl.akamaized.net/images/logo/header/es1.png",
+    "ENG-Premier League": "https://tmssl.akamaized.net/images/logo/header/gb1.png",
+    "ITA-Serie A": "https://tmssl.akamaized.net/images/logo/header/it1.png",
+    "GER-Bundesliga": "https://tmssl.akamaized.net/images/logo/header/l1.png",
+    "FRA-Ligue 1": "https://tmssl.akamaized.net/images/logo/header/fr1.png",
+}
+
+
 def palette(league: str | None) -> Palette:
     """Paleta de una liga. La de por defecto cuando se miran todas a la vez."""
     if league is None:
@@ -86,125 +99,113 @@ def apply(league: str | None = None) -> Palette:
 
 
 def _css(p: Palette) -> str:
+    """CSS del tema.
+
+    Se limita a lo que el tema base de `.streamlit/config.toml` no puede hacer:
+    el acento por liga y los cuatro bloques propios. Todo lo demas —controles,
+    tablas, expansores, barra lateral— lo pinta Streamlit con el tema base, que
+    es lo unico que garantiza que no quede texto oscuro sobre fondo oscuro.
+
+    Antes esto intentaba repintar los controles desde fuera, apuntando a los
+    `data-baseweb` de Streamlit. Es fragil por definicion: son detalles internos
+    de la libreria y basta con que cambien de version para que la pantalla salga
+    a medio pintar, que es justo lo que pasaba.
+    """
     return f"""
 <style>
 :root {{
     --acento: {p.accent};
     --acento-suave: {p.accent_soft};
     --secundario: {p.secondary};
-    --tinta: {INK};
     --superficie: {SURFACE};
-    --superficie-alta: {SURFACE_HIGH};
     --borde: {BORDER};
-    --texto: {TEXT};
     --texto-apagado: {TEXT_MUTED};
 }}
 
+/* Un degradado tenue con el color de la liga, sobre el fondo del tema base. */
 .stApp {{
     background:
-        radial-gradient(1200px 600px at 15% -10%, {p.accent_soft} 0%, transparent 60%),
+        radial-gradient(1100px 520px at 12% -8%, {p.accent_soft} 0%, transparent 62%),
         {INK};
-    color: {TEXT};
 }}
 
-/* La barra lateral solo guarda el estado de los datos: los filtros se han
-   subido arriba, donde se usan. */
-section[data-testid="stSidebar"] {{
-    background: {SURFACE};
-    border-right: 1px solid {BORDER};
-}}
-
-h1, h2, h3, h4 {{ color: {TEXT}; letter-spacing: -0.02em; }}
+h1, h2, h3, h4 {{ letter-spacing: -0.02em; }}
 h1 {{ font-weight: 800; }}
 
-/* Barra de filtros: una cinta fija arriba, separada del contenido. */
-.barra-filtros {{
-    background: {SURFACE};
-    border: 1px solid {BORDER};
-    border-radius: 14px;
-    padding: 0.75rem 1rem 0.25rem 1rem;
-    margin-bottom: 1.25rem;
-}}
+/* Cifras destacadas: el valor toma el color de la liga. */
+div[data-testid="stMetricValue"] {{ color: {p.accent}; font-size: 1.35rem; }}
 
-/* Tarjetas de la portada y de los paneles. */
-.tarjeta {{
-    background: linear-gradient(160deg, {SURFACE_HIGH} 0%, {SURFACE} 100%);
-    border: 1px solid {BORDER};
-    border-radius: 16px;
-    padding: 1.25rem 1.4rem;
-    height: 100%;
-}}
-.tarjeta h3 {{ margin: 0 0 .35rem 0; font-size: 1.15rem; }}
-.tarjeta p {{ color: {TEXT_MUTED}; margin: 0; font-size: .9rem; line-height: 1.5; }}
+/* Pestanas activas, tambien con el acento. */
+button[data-baseweb="tab"][aria-selected="true"] {{ color: {p.accent}; }}
+div[data-baseweb="tab-highlight"] {{ background-color: {p.accent}; }}
 
-/* Cinta de identidad de la liga. */
+/* Boton principal. */
+.stButton button[kind="primary"] {{
+    background: {p.accent};
+    border-color: {p.accent};
+    color: {INK};
+    font-weight: 700;
+}}
+.stButton button:hover {{ border-color: {p.accent}; }}
+
+/* Cinta con el nombre de la liga. */
 .cinta-liga {{
     display: inline-flex; align-items: center; gap: .5rem;
     background: {p.accent_soft};
     color: {p.accent};
     border: 1px solid {p.accent};
     border-radius: 999px;
-    padding: .2rem .8rem;
-    font-size: .78rem; font-weight: 700; text-transform: uppercase;
+    padding: .18rem .8rem;
+    font-size: .75rem; font-weight: 700; text-transform: uppercase;
     letter-spacing: .06em;
 }}
 
-/* Cifras destacadas. */
-div[data-testid="stMetric"] {{
-    background: {SURFACE};
-    border: 1px solid {BORDER};
-    border-radius: 12px;
-    padding: .7rem .9rem;
+/* Ficha de la portada: alta y estrecha, con el icono arriba. */
+.tarjeta-ambito {{
+    text-align: center;
+    padding: 1.6rem 1.2rem 0.6rem 1.2rem;
 }}
-div[data-testid="stMetricValue"] {{ color: {p.accent}; font-size: 1.4rem; }}
-div[data-testid="stMetricLabel"] {{ color: {TEXT_MUTED}; }}
-
-/* Pestanas. */
-button[data-baseweb="tab"] {{ color: {TEXT_MUTED}; }}
-button[data-baseweb="tab"][aria-selected="true"] {{ color: {p.accent}; }}
-div[data-baseweb="tab-highlight"] {{ background-color: {p.accent}; }}
-
-/* Controles. */
-div[data-baseweb="select"] > div, .stTextInput input, .stNumberInput input {{
-    background-color: {SURFACE_HIGH};
-    border-color: {BORDER};
-    color: {TEXT};
+.tarjeta-ambito .icono {{
+    color: {p.accent};
+    line-height: 0; margin-bottom: .9rem;
+    filter: drop-shadow(0 0 16px {p.accent_soft});
 }}
-.stButton button {{
-    background: {SURFACE_HIGH};
-    color: {TEXT};
-    border: 1px solid {BORDER};
-    border-radius: 10px;
-    font-weight: 600;
-}}
-.stButton button:hover {{ border-color: {p.accent}; color: {p.accent}; }}
-.stButton button[kind="primary"] {{
-    background: {p.accent};
-    border-color: {p.accent};
-    color: {INK};
+.tarjeta-ambito h3 {{ margin: 0 0 .5rem 0; font-size: 1.3rem; }}
+.tarjeta-ambito p {{
+    color: {TEXT_MUTED}; margin: 0 auto; font-size: .92rem;
+    line-height: 1.55; max-width: 22rem;
 }}
 
-/* Tablas y expansores. */
-div[data-testid="stDataFrame"] {{ border: 1px solid {BORDER}; border-radius: 12px; }}
-details, div[data-testid="stExpander"] {{
-    background: {SURFACE};
-    border: 1px solid {BORDER} !important;
-    border-radius: 12px;
+/* Ficha de una liga o un equipo en el navegador de tres pasos. */
+.ficha-escudo {{
+    text-align: center; padding: .4rem 0 .2rem 0;
 }}
+.ficha-escudo img {{ height: 44px; width: auto; object-fit: contain; }}
+.ficha-escudo .sin-escudo {{
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 10px;
+    background: {p.accent_soft}; color: {p.accent};
+    font-weight: 800; font-size: 1.05rem;
+}}
+.ficha-escudo .nombre {{
+    margin-top: .45rem; font-size: .86rem; font-weight: 600;
+    color: {TEXT}; line-height: 1.25;
+}}
+.ficha-escudo .dato {{ color: {TEXT_MUTED}; font-size: .75rem; }}
 
-/* El panel de detalle que acompana al grafico. */
+/* Panel de lectura que acompana a un grafico. */
 .panel-detalle {{
     background: {SURFACE};
     border: 1px solid {BORDER};
     border-left: 3px solid {p.accent};
-    border-radius: 12px;
-    padding: .9rem 1rem;
-    margin-bottom: .6rem;
+    border-radius: 10px;
+    padding: .7rem .85rem;
+    margin-bottom: .5rem;
 }}
 .panel-detalle .titulo {{
-    color: {TEXT_MUTED}; font-size: .72rem; text-transform: uppercase;
+    color: {TEXT_MUTED}; font-size: .7rem; text-transform: uppercase;
     letter-spacing: .07em; margin-bottom: .15rem;
 }}
-.panel-detalle .valor {{ color: {TEXT}; font-size: .95rem; font-weight: 600; }}
+.panel-detalle .valor {{ color: {TEXT}; font-size: .92rem; font-weight: 600; }}
 </style>
 """

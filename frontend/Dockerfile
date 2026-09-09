@@ -13,6 +13,9 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
+# El tema base de Streamlit. Sin el, los controles se pintan en claro sobre el
+# fondo oscuro y quedan textos oscuros sobre oscuro.
+COPY .streamlit ./.streamlit
 COPY src ./src
 
 RUN pip install -e "." \

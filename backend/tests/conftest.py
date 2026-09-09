@@ -92,6 +92,13 @@ class FakeDataAccess:
     def market(self, understat_id: str) -> dict:
         return self._market
 
+    def team_identities(self, season: str) -> dict[tuple[str, str], dict]:
+        # Sin cruzar con Transfermarkt: es el estado normal antes de esa carga.
+        return {}
+
+    def squad_market(self, season: str, league: str, team: str) -> list[dict]:
+        return []
+
 
 LIGAS = [
     "ESP-La Liga",

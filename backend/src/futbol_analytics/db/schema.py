@@ -204,6 +204,21 @@ player_market_value = Table(
 Index("ix_market_value_fecha", player_market_value.c.valuation_date)
 
 
+team_identity = Table(
+    "team_identity",
+    metadata,
+    Column("league", Text, primary_key=True),
+    Column("season", Text, primary_key=True),
+    Column("team", Text, primary_key=True),
+    Column("transfermarkt_id", Text, nullable=True),
+    Column("club_name", Text, nullable=True, comment="Nombre oficial en Transfermarkt"),
+    Column("scraped_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    comment=(
+        "Cruce de cada equipo nuestro con su club en Transfermarkt. Es lo que permite "
+        "ensenar el escudo y enlazar la ficha del club."
+    ),
+)
+
 player_profile = Table(
     "player_profile",
     metadata,

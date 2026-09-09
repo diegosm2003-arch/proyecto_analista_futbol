@@ -41,6 +41,7 @@ DESCRIPTORS: dict[str, tuple[str, str]] = {
     "chance_creation": ("genera mucho peligro", "genera poco peligro"),
     "chance_prevention": ("concede poco", "concede mucho"),
     "finishing": ("finaliza por encima de lo esperado", "desperdicia ocasiones"),
+    "chance_quality": ("cada llegada es peligrosa", "llega mucho y remata mal"),
 }
 
 
@@ -90,6 +91,13 @@ def build_features(teams: pd.DataFrame) -> pd.DataFrame:
     goles = pd.to_numeric(a_favor["goals"], errors="coerce")
     xg = pd.to_numeric(a_favor["np_xg"], errors="coerce")
     features["finishing"] = (goles - xg) / partidos
+
+    # Peligro por llegada, no por partido. Separa dos equipos que la media por
+    # partido confunde: el que pisa mucho el area y remata desde cualquier sitio
+    # y el que llega menos pero cada llegada acaba en ocasion. Son estilos
+    # distintos y hasta ahora salian en el mismo grupo.
+    llegadas = pd.to_numeric(a_favor["deep_completions"], errors="coerce")
+    features["chance_quality"] = xg / llegadas.where(llegadas > 0)
 
     return features
 

@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from futbol_analytics.api import services
 from futbol_analytics.api.dependencies import DataAccessDep
-from futbol_analytics.api.schemas import StyleReport, TeamStyle
+from futbol_analytics.api.schemas import SquadPlayer, StyleReport, TeamCard, TeamStyle
 
 router = APIRouter(prefix="/teams", tags=["equipos"])
 
@@ -40,6 +40,64 @@ def styles(
         silhouette=resultado.silhouette,
         teams=[_style(fila) for _, fila in asignaciones.iterrows()],
     )
+
+
+# Patron del escudo en Transfermarkt. Se construye a partir del identificador
+# en lugar de guardar la URL entera: es estable y evita una peticion por club
+# solo para leer un campo que se puede derivar.
+CREST_URL = "https://img.a.transfermarkt.technology/wappen/big/{club_id}.png"
+
+
+@router.get("", summary="Equipos de una temporada, con escudo")
+def teams(
+    season: str,
+    data: DataAccessDep,
+    league: str | None = Query(default=None, description="Limitar a una liga"),
+) -> list[TeamCard]:
+    """Equipos cargados, para el navegador de la interfaz.
+
+    Va aparte de `/teams/styles` porque responde a otra pregunta: aquello dice
+    como juega cada equipo, y esto solo dice cuales hay. Se usa para elegir, no
+    para analizar, y por eso no arrastra el coste del clustering.
+    """
+    jugadores = services.enriched_players(data, season)
+    if league:
+        jugadores = jugadores[jugadores["league"] == league]
+    if jugadores.empty:
+        return []
+
+    identidades = data.team_identities(season)
+    plantillas = jugadores.groupby(["league", "team"]).size()
+
+    fichas = []
+    for (liga, equipo), tamano in plantillas.items():
+        identidad = identidades.get((liga, equipo), {})
+        club_id = identidad.get("transfermarkt_id")
+        fichas.append(
+            TeamCard(
+                league=liga,
+                season=season,
+                team=equipo,
+                squad_size=int(tamano),
+                crest_url=CREST_URL.format(club_id=club_id) if club_id else None,
+            )
+        )
+    return sorted(fichas, key=lambda f: (f.league, f.team))
+
+
+@router.get("/{team}/squad", summary="Plantilla con edad y valor")
+def squad(
+    team: str,
+    season: str,
+    league: str,
+    data: DataAccessDep,
+) -> list[SquadPlayer]:
+    """Edad y valor de cada jugador de un equipo.
+
+    Es lo que sostiene la lectura de planificacion: si el patrimonio del club
+    esta en gente que aun va a subir o en gente que ya solo puede bajar.
+    """
+    return [SquadPlayer(**fila) for fila in data.squad_market(season, league, team)]
 
 
 def _style(fila: pd.Series) -> TeamStyle:

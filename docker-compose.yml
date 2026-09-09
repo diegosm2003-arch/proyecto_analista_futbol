@@ -76,6 +76,8 @@ services:
       - "${APP_HOST_PORT:-8501}:8501"
     volumes:
       - ./frontend/src:/app/src
+      # El tema tambien se monta para poder ajustarlo sin reconstruir.
+      - ./frontend/.streamlit:/app/.streamlit
     depends_on:
       backend:
         condition: service_healthy

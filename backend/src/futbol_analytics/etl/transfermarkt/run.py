@@ -53,6 +53,7 @@ def run(
     limit: int | None = None,
     league: str | None = None,
     refresh: bool = False,
+    only_teams: bool = False,
 ) -> RunResult:
     """Resuelve identidades y carga ficha, valor de mercado y fichajes.
 
@@ -79,13 +80,21 @@ def run(
     # de cargar y no el dato: al arreglar el cruce de nombres de club, los
     # equipos afectados ya tenian tasaciones frescas y se habrian saltado hasta
     # el mes siguiente.
-    jugadores = loader.pending_players(
-        motor,
-        temporada,
-        0 if refresh else ajustes.transfermarkt_freshness_hours,
-        limit=limit,
-        team=team,
-        league=league,
+    # `only_teams` se queda con lo barato: plantillas, escudos y fichas, sin
+    # bajar el historico de nadie. Una liga entera son 21 peticiones en lugar de
+    # varios miles, y es lo que hace falta para que la interfaz pueda ensenar
+    # los equipos de las cinco grandes sin esperar horas.
+    jugadores = (
+        []
+        if only_teams
+        else loader.pending_players(
+            motor,
+            temporada,
+            0 if refresh else ajustes.transfermarkt_freshness_hours,
+            limit=limit,
+            team=team,
+            league=league,
+        )
     )
     logger.info(
         "Jugadores a procesar",
@@ -101,7 +110,20 @@ def run(
     # para los que tienen jugadores pendientes: son 21 peticiones por liga y
     # traen la ficha de todo el mundo.
     todos = loader.season_players(motor, temporada, team=team, league=league)
-    plantillas = _plantillas(cliente, {(j["league"], j["team"]) for j in todos})
+    plantillas, clubes = _plantillas(cliente, {(j["league"], j["team"]) for j in todos})
+    loader.load_team_identity(
+        motor,
+        [
+            {
+                "league": liga,
+                "season": temporada,
+                "team": equipo,
+                "transfermarkt_id": str(club["id"]),
+                "club_name": club.get("name"),
+            }
+            for (liga, equipo), club in clubes.items()
+        ],
+    )
 
     cruces, valores, fichajes, fichas = [], [], [], []
     sin_resolver = pendientes = 0
@@ -191,14 +213,18 @@ def run(
 def _plantillas(
     cliente: TransfermarktClient,
     equipos: set[tuple[str, str]],
-) -> dict[tuple[str, str], list[dict]]:
+) -> tuple[dict[tuple[str, str], list[dict]], dict[tuple[str, str], dict]]:
     """Plantilla de Transfermarkt para cada equipo, pedida una sola vez.
 
     Una liga entera son 1 peticion para los clubes mas 1 por club: veintiuna,
     frente a las mas de cuatrocientas busquedas por nombre de antes.
+
+    Devuelve tambien con que club se ha cruzado cada equipo, que es lo que
+    permite guardar el escudo sin ninguna peticion extra.
     """
     clubes_por_liga: dict[str, list[dict]] = {}
     resultado: dict[tuple[str, str], list[dict]] = {}
+    cruces: dict[tuple[str, str], dict] = {}
 
     for liga, equipo in sorted(equipos):
         competicion = squads.COMPETITION_IDS.get(liga)
@@ -218,6 +244,7 @@ def _plantillas(
         club = squads.match_club(equipo, clubes_por_liga[liga])
         if club is None:
             continue
+        cruces[(liga, equipo)] = club
         try:
             resultado[(liga, equipo)] = cliente.club_players(str(club["id"]))
         except TransfermarktError as error:
@@ -227,7 +254,7 @@ def _plantillas(
             )
 
     logger.info("Plantillas resueltas", extra={"equipos": len(resultado)})
-    return resultado
+    return resultado, cruces
 
 
 def _ficha_en(plantilla: list[dict], transfermarkt_id: str) -> dict | None:
@@ -297,6 +324,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Reprocesar aunque el dato sea reciente. Para cuando cambia la forma de cargar.",
     )
+    parser_cli.add_argument(
+        "--solo-equipos",
+        action="store_true",
+        dest="only_teams",
+        help="Resolver plantillas, escudos y fichas sin bajar historicos. Muy rapido.",
+    )
     parser_cli.add_argument("--limit", type=int, help="Maximo de jugadores a procesar.")
     parser_cli.add_argument(
         "--pendientes",
@@ -326,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
             league=args.league,
             refresh=args.refresh,
+            only_teams=args.only_teams,
         )
     except Exception:
         logger.exception("La carga de Transfermarkt ha terminado con error")

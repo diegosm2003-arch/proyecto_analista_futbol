@@ -1,0 +1,23 @@
+# Tema base de la interfaz.
+#
+# Va aqui y no solo en el CSS que inyecta `theme.py` porque Streamlit pinta sus
+# propios controles —desplegables, campos de texto, expansores, tablas— con este
+# tema antes de que llegue ningun CSS nuestro. Sin esto, la aplicacion salia con
+# los controles en claro sobre el fondo oscuro: texto oscuro sobre oscuro en la
+# barra lateral y desplegables blancos en mitad de la pantalla.
+#
+# El acento de cada liga sigue viniendo del CSS, que es lo unico que puede
+# cambiar en caliente. Aqui va solo la base, que no cambia nunca.
+[theme]
+base = "dark"
+primaryColor = "#F5C518"
+backgroundColor = "#0E1420"
+secondaryBackgroundColor = "#161D2B"
+textColor = "#E9EDF5"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

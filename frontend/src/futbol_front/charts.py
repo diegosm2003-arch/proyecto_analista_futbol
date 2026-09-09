@@ -219,6 +219,71 @@ def scouting_plane(
     return figura
 
 
+def squad_age_value(
+    players: list[tuple[str, int, float]],
+    palette: Palette = DEFAULT,
+    peak_age: int = 27,
+) -> Figure:
+    """Edad frente a valor de mercado de una plantilla.
+
+    Es la lectura de planificacion deportiva de toda la vida, y contesta cosas
+    que ninguna tabla ordenada por valor contesta: si el patrimonio del club
+    esta en gente que aun va a subir o en gente que ya solo puede bajar, y si
+    hay un agujero generacional entre los veteranos y la cantera.
+
+    La linea vertical marca el pico de valor, alrededor de los 27: a la
+    izquierda el valor todavia tiende a crecer, a la derecha a caer. No es una
+    ley, es donde esta el maximo de la curva en casi todas las posiciones.
+    """
+    if not players:
+        raise ValueError("No hay jugadores con edad y valor conocidos.")
+
+    figura, ejes = _lienzo((5.6, 3.4))
+    edades = [p[1] for p in players]
+    valores = [p[2] / 1e6 for p in players]
+
+    ejes.axvline(peak_age, color=GRID, linewidth=1, linestyle="--", zorder=1)
+    ejes.text(
+        peak_age + 0.2,
+        max(valores) * 0.95,
+        "pico de valor",
+        color=TEXT_MUTED,
+        fontsize=7,
+        va="top",
+    )
+
+    ejes.scatter(
+        edades,
+        valores,
+        s=70,
+        color=palette.accent,
+        alpha=0.85,
+        edgecolor=BACKGROUND,
+        linewidth=0.8,
+        zorder=3,
+    )
+
+    # Solo se etiquetan los mas caros: con veinte nombres el grafico se vuelve
+    # ilegible y lo que interesa es quien sostiene el patrimonio.
+    destacados = sorted(players, key=lambda p: p[2], reverse=True)[:6]
+    for nombre, edad, valor in destacados:
+        ejes.annotate(
+            nombre,
+            (edad, valor / 1e6),
+            xytext=(5, 3),
+            textcoords="offset points",
+            fontsize=7,
+            color=TEXT,
+        )
+
+    ejes.set_xlabel("Edad", color=TEXT_MUTED, fontsize=8)
+    ejes.set_ylabel("Valor de mercado (M EUR)", color=TEXT_MUTED, fontsize=8)
+    ejes.grid(color=GRID, linewidth=0.6, alpha=0.6, zorder=0)
+    ejes.tick_params(colors=TEXT_MUTED, labelsize=7)
+    figura.tight_layout()
+    return figura
+
+
 def style_map(data: StyleMapData, title: str, palette: Palette = DEFAULT) -> Figure:
     """Mapa de estilos: territorio frente a altura de presion.
 

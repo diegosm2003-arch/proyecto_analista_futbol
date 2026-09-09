@@ -61,6 +61,7 @@ class ApiClient:
         self,
         season: str,
         league: str | None = None,
+        team: str | None = None,
         position_group: str | None = None,
         role: str | None = None,
         name: str | None = None,
@@ -71,6 +72,7 @@ class ApiClient:
             params={
                 "season": season,
                 "league": league,
+                "team": team,
                 "position_group": position_group,
                 "role": role,
                 "name": name,
@@ -125,6 +127,15 @@ class ApiClient:
         )
 
     # --- Equipos ----------------------------------------------------------
+
+    def teams(self, season: str, league: str | None = None) -> list[dict[str, Any]]:
+        """Equipos de una temporada, con escudo."""
+        return self._get("/teams", params={"season": season, "league": league})
+
+    def squad(self, team: str, season: str, league: str) -> list[dict[str, Any]]:
+        """Plantilla de un equipo con edad y valor de mercado."""
+        ruta = f"/teams/{quote(team, safe='')}/squad"
+        return self._get(ruta, params={"season": season, "league": league})
 
     def team_styles(
         self,

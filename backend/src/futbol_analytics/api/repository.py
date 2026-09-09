@@ -21,6 +21,7 @@ from futbol_analytics.db.schema import (
     player_profile,
     player_season,
     player_transfers,
+    team_identity,
     team_season,
 )
 
@@ -61,6 +62,12 @@ class DataAccess(Protocol):
 
     def market(self, understat_id: str) -> dict:
         """Ficha, valor de mercado y carrera de un jugador en Transfermarkt."""
+
+    def team_identities(self, season: str) -> dict[tuple[str, str], dict]:
+        """Cruce de cada equipo con su club en Transfermarkt, por (liga, equipo)."""
+
+    def squad_market(self, season: str, league: str, team: str) -> list[dict]:
+        """Edad y ultimo valor de mercado de cada jugador de un equipo."""
 
 
 class SqlDataAccess:
@@ -149,6 +156,50 @@ class SqlDataAccess:
                 "market_value": [dict(f) for f in conexion.execute(valores).mappings()],
                 "transfers": [dict(f) for f in conexion.execute(carrera).mappings()],
             }
+
+    def team_identities(self, season: str) -> dict[tuple[str, str], dict]:
+        consulta = select(team_identity).where(team_identity.c.season == season)
+        with self._engine.connect() as conexion:
+            filas = conexion.execute(consulta).mappings().all()
+        return {(f["league"], f["team"]): dict(f) for f in filas}
+
+    def squad_market(self, season: str, league: str, team: str) -> list[dict]:
+        """Edad y ultimo valor de mercado de cada jugador de un equipo.
+
+        Se toma la tasacion mas reciente de cada uno, no la media: el valor de
+        un jugador es lo que vale hoy.
+        """
+        ultimo = (
+            select(
+                player_market_value.c.understat_id,
+                func.max(player_market_value.c.valuation_date).label("fecha"),
+            )
+            .group_by(player_market_value.c.understat_id)
+            .subquery()
+        )
+        consulta = (
+            select(
+                player_season.c.player,
+                player_profile.c.age,
+                player_profile.c.position,
+                player_market_value.c.market_value_eur,
+            )
+            .select_from(player_season)
+            .join(player_profile, player_profile.c.understat_id == player_season.c.understat_id)
+            .join(ultimo, ultimo.c.understat_id == player_season.c.understat_id)
+            .join(
+                player_market_value,
+                (player_market_value.c.understat_id == ultimo.c.understat_id)
+                & (player_market_value.c.valuation_date == ultimo.c.fecha),
+            )
+            .where(
+                player_season.c.season == season,
+                player_season.c.league == league,
+                player_season.c.team == team,
+            )
+        )
+        with self._engine.connect() as conexion:
+            return [dict(fila) for fila in conexion.execute(consulta).mappings()]
 
     def _read(self, consulta) -> pd.DataFrame:
         with self._engine.connect() as conexion:
