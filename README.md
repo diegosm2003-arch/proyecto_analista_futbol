@@ -32,11 +32,18 @@ que cada analisis diga algo defendible sobre el juego.
 ## Arquitectura
 
 ```
-                     backend/                          frontend/
-FBref  ->  ETL  ->  PostgreSQL  ->  FastAPI  --HTTP-->  Streamlit
-                                       ^                    |
-                                       +----- Ollama <------+
+                        backend/                          frontend/
+Understat  ->  ETL  ->  PostgreSQL  ->  FastAPI  --HTTP-->  Streamlit
+                                           ^                    |
+                                           +----- Ollama <------+
 ```
+
+**La fuente es Understat, no FBref.** El proyecto nacio sobre FBref y hubo que
+cambiarlo: FBref sirve vacias sus tablas avanzadas (comprobado en 2023/24,
+2024/25 y 2025/26, cero valores en 1.314 celdas de pases completados) y ademas
+exige pasar un Cloudflare con navegador. Understat publica la familia xG
+completa, da un identificador estable de jugador y se descarga con peticiones
+HTTP normales, asi que el ETL corre dentro del contenedor.
 
 **Tres imagenes**: PostgreSQL (oficial), `backend` y `frontend`. El ETL reutiliza
 la imagen del backend cambiando el entrypoint, porque comparte con la API el
@@ -124,35 +131,21 @@ que leerlo con esa reserva.
 
 ### Primera carga
 
-Antes de nada, comprobar que el catalogo de metricas casa con lo que FBref
-publica hoy. FBref renombra columnas de vez en cuando y esto convierte ese fallo
-en un diff legible en lugar de una depuracion a ciegas:
-
-```bash
-docker compose --profile etl run --rm etl --inspect --leagues "ESP-La Liga"
-```
-
-Revisa `data/fbref_columns.json`, corrige `metrics.py` si hace falta, y carga:
-
 ```bash
 # LaLiga de la temporada en curso, para ver algo funcionando cuanto antes
 docker compose --profile etl run --rm etl --leagues "ESP-La Liga"
 
-# La carga que el producto necesita de verdad: las Big 5
+# La carga que el producto necesita: las cinco grandes ligas
 docker compose --profile etl run --rm etl
 ```
 
-Cuando se piden las cinco grandes ligas, el ETL usa **la pagina que FBref
-publica con las cinco combinadas** en lugar de scrapearlas una a una. Devuelve
-exactamente los mismos datos, porque `soccerdata` reparte cada fila a su liga,
-con una quinta parte de peticiones: a 7 segundos cada una, esa diferencia se
-nota. Se desactiva con `USE_COMBINED_BIG5=false`.
+Las Big 5 de una temporada son unos **2.800 jugadores**, de los que cerca de
+2.000 superan el umbral de minutos. Esa es la poblacion contra la que se
+calculan los percentiles.
 
-> **Cargar solo LaLiga funciona, pero degrada los percentiles.** La poblacion de
-> referencia son las cinco grandes ligas: con una sola, un lateral se compara
-> contra unos 80 laterales en lugar de contra 400. El ETL avisa por log y la API
-> lo indica en los `caveats` de cada perfil. Sirve para probar la cadena de
-> extremo a extremo; no para sacar conclusiones.
+> **Cargar solo LaLiga funciona, pero degrada los percentiles.** Con una sola
+> liga, un centrocampista se compara contra unos 120 en lugar de contra 427. El
+> ETL avisa por log y la API lo indica en los `caveats` de cada perfil.
 
 ### Carga programada
 
@@ -306,7 +299,7 @@ PostgreSQL. Documentacion interactiva en `/docs`.
 | `GET /health` | Estado y `data_version` (marca de la ultima carga del ETL) |
 | `GET /meta/catalog` | Temporadas, ligas y umbral de minutos |
 | `GET /meta/metrics` | Catalogo de metricas y como hay que leerlas |
-| `GET /meta/roles` | Los doce roles que asigna el clustering |
+| `GET /meta/roles` | Los cuatro perfiles ofensivos que asigna el clustering |
 | `GET /meta/etl` | Historial de cargas: estado, filas y errores |
 | `GET /meta/templates` | Ejes del pizza chart por posicion |
 | `GET /players` | Busqueda con filtros por liga, posicion, rol y nombre |

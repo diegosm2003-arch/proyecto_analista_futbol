@@ -3,6 +3,14 @@
 # Imagen del backend: ETL, analisis y API. Una sola imagen para los dos usos,
 # porque comparten catalogo, esquema y logica de analisis. El servicio `etl` del
 # docker-compose reutiliza esta misma imagen cambiando el entrypoint.
+#
+# NO lleva navegador. La fuente de datos es Understat, que se descarga con
+# peticiones HTTP normales. Hubo una version de esta imagen con Google Chrome y
+# Xvfb, necesarios para pasar el Cloudflare de FBref, que la engordaba de 1 a
+# 2,1 GB; se quitaron al comprobar que FBref sirve vacias sus tablas avanzadas y
+# dejar de usarlo. El lector `etl/fbref_pages.py` sigue en el codigo y sus tests
+# no necesitan red, pero descargar de FBref exigiria volver a instalar el
+# navegador.
 
 FROM python:3.11-slim
 
@@ -12,27 +20,6 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
-
-# FBref esta detras de Cloudflare, asi que soccerdata 1.9 no descarga con
-# peticiones HTTP: usa un Chrome real a traves de seleniumbase en modo
-# "undetected". Sin navegador en la imagen, el ETL crea el lector, registra un
-# error y no descarga nada.
-#
-# Se instala Chrome estable y no Chromium porque el modo undetected de
-# seleniumbase esta pensado para el primero. Xvfb aporta la pantalla virtual que
-# necesita el paso de Cloudflare, que pulsa la casilla del captcha con PyAutoGUI
-# y por tanto no funciona sin display.
-#
-# No se hace `apt-get autoremove` despues: se lleva por delante las dependencias
-# de Chrome (libglib2.0-0, libxdamage1, xdg-utils...) y deja una imagen que
-# construye en verde y no tiene navegador.
-ENV CHROME_DEB=https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends wget ca-certificates xvfb \
-    && wget -q -O /tmp/chrome.deb "$CHROME_DEB" \
-    && apt-get install -y --no-install-recommends /tmp/chrome.deb \
-    && rm -rf /tmp/chrome.deb /var/lib/apt/lists/* \
-    && google-chrome --version
 
 # Instalacion editable: en desarrollo el codigo se monta como volumen, asi que
 # un cambio en src/ se refleja sin reconstruir la imagen.
@@ -44,24 +31,18 @@ RUN pip install -e ".[etl,api,analysis,scheduler]" \
     && mkdir -p /app/data \
     && chown -R appuser /app
 
-# Dos librerias descargan binarios en tiempo de ejecucion DENTRO de su propio
-# paquete, que pertenece a root. Como el contenedor corre sin privilegios, en
-# ejecucion no pueden: seleniumbase lo intenta tres veces y falla en cinco
-# segundos, y tls_requests lanza "Failed to download the required TLS library".
+# `tls_requests`, que usa Understat, descarga una libreria nativa la primera vez
+# DENTRO de su propio paquete, que pertenece a root. Como el contenedor corre
+# sin privilegios, en ejecucion no puede: falla con "Failed to download the
+# required TLS library". Se baja aqui y se cede el directorio.
 #
-# Se descargan aqui, como root y con Chrome ya instalado para que las versiones
-# casen, y se ceden los directorios por si hay que renovarlos.
-#
-# Cada descarga se verifica en su propia capa: sin comprobarlo, una imagen a la
-# que le falte un binario se construye en verde y el fallo aparece mucho
-# despues, cuando el ETL "termina bien" sin haber traido nada.
-RUN sbase get uc_driver \
-    && python -c "import tls_requests; tls_requests.Client()" \
-    && python -c "import pathlib, seleniumbase; \
-        ruta = pathlib.Path(seleniumbase.__file__).parent / 'drivers' / 'uc_driver'; \
-        assert ruta.exists(), 'falta el driver del navegador'" \
-    && chown -R appuser \
-        "$(python -c 'import pathlib, seleniumbase; print(pathlib.Path(seleniumbase.__file__).parent / "drivers")')" \
+# La descarga se verifica en su propia capa: sin comprobarlo, una imagen a la
+# que le falte el binario se construye en verde y el fallo aparece mucho
+# despues, cuando el ETL no puede leer nada.
+RUN python -c "import tls_requests; tls_requests.Client()" \
+    && python -c "import pathlib, tls_requests; \
+        directorio = pathlib.Path(tls_requests.__file__).parent / 'bin'; \
+        assert any(directorio.iterdir()), 'falta la libreria TLS'" \
     && chown -R appuser \
         "$(python -c 'import pathlib, tls_requests; print(pathlib.Path(tls_requests.__file__).parent / "bin")')"
 
