@@ -25,6 +25,12 @@ from __future__ import annotations
 # quedarse con la primera; este orden solo resuelve valores mal formados.
 POSITION_GROUPS: tuple[str, ...] = ("GK", "DF", "MF", "FW")
 
+# Understat describe la posicion con letras sueltas separadas por espacios:
+# "D S" es un defensa que ademas entro desde el banquillo, "F M S" un jugador
+# usado de delantero y de medio. La "S" es un marcador de suplencia, no una
+# posicion, y se descarta.
+SUBSTITUTE_MARKER = "S"
+
 _ALIASES: dict[str, str] = {
     "GK": "GK",
     "DF": "DF",
@@ -59,8 +65,13 @@ def split_positions(raw: str | None) -> tuple[str, ...]:
         return ()
 
     groups: list[str] = []
-    for token in raw.replace("/", ",").split(","):
-        normalised = _ALIASES.get(token.strip().upper())
+    # Se acepta tanto el formato de FBref ("DF,MF") como el de Understat
+    # ("D M S"): coma, barra o espacio separan igual.
+    for token in raw.replace("/", ",").replace(" ", ",").split(","):
+        limpio = token.strip().upper()
+        if not limpio or limpio == SUBSTITUTE_MARKER:
+            continue
+        normalised = _ALIASES.get(limpio)
         if normalised and normalised not in groups:
             groups.append(normalised)
     return tuple(groups)

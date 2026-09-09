@@ -9,31 +9,27 @@ from futbol_analytics.analysis import style
 
 
 def _equipos(n: int = 8) -> pd.DataFrame:
-    """Equipos con un gradiente de posesion y de altura de presion."""
+    """Equipos con un gradiente de presion y de territorio.
+
+    Formato de `team_season`: una fila por equipo y perspectiva, con las
+    metricas de Understat.
+    """
     filas = []
     for i in range(n):
-        # Gradiente de posesion: del 25 % al 80 % sobre 1.200 pases por partido.
-        dominio = 300.0 + i * 60.0  # pases propios
-        rival = 1200.0 - dominio  # pases del rival
+        # Del equipo que mas presiona (PPDA baja) al que menos.
+        ppda = 6.0 + i * 1.5
         filas.append(
             {
                 "league": "ESP-La Liga",
                 "season": "2526",
                 "team": f"Equipo {i}",
                 "perspective": "for",
-                "minutes": 3420.0,
                 "matches_played": 38.0,
-                "passes_attempted": dominio,
-                "passes_completed": dominio * 0.85,
-                "progressive_passes": dominio * 0.10,
-                "passes_into_final_third": dominio * 0.08,
-                "touches_att_third": dominio * 0.5,
-                "shots": 400.0 + i * 20.0,
-                "npxg": 45.0 + i * 3.0,
-                "goals": 45.0 + i * 3.0,
-                "tackles": 700.0 - i * 40.0,
-                "tackles_att_third": (700.0 - i * 40.0) * (0.1 + i * 0.03),
-                "interceptions": 300.0 - i * 10.0,
+                "goals": 60.0 - i * 3,
+                "xg": 58.0 - i * 3,
+                "np_xg": 55.0 - i * 3,
+                "deep_completions": 400.0 - i * 25,
+                "ppda": ppda,
             }
         )
         filas.append(
@@ -42,49 +38,44 @@ def _equipos(n: int = 8) -> pd.DataFrame:
                 "season": "2526",
                 "team": f"Equipo {i}",
                 "perspective": "against",
-                "minutes": 3420.0,
                 "matches_played": 38.0,
-                "passes_attempted": rival,
-                "passes_completed": rival * 0.85,
-                "progressive_passes": rival * 0.10,
-                "passes_into_final_third": rival * 0.08,
-                "touches_att_third": rival * 0.5,
-                "shots": 400.0,
-                "npxg": 40.0,
-                "goals": 40.0,
-                "tackles": 600.0,
-                "tackles_att_third": 60.0,
-                "interceptions": 250.0,
+                "goals": 30.0 + i * 2,
+                "xg": 32.0 + i * 2,
+                "np_xg": 30.0 + i * 2,
+                "deep_completions": 200.0 + i * 20,
+                "ppda": 12.0,
             }
         )
     return pd.DataFrame(filas)
 
 
-def test_la_posesion_sale_de_la_cuota_de_pases() -> None:
+def test_la_presion_usa_la_ppda_real_invertida() -> None:
+    # PPDA baja es presion alta. Se invierte el signo para que, como el resto de
+    # rasgos, "mas alto" signifique "mas de eso".
     features = style.build_features(_equipos())
 
-    # Equipo 0: 300 pases propios de los 1.200 del partido.
-    assert features["possession"].iloc[0] == pytest.approx(25.0)
+    assert features["pressing"].iloc[0] == pytest.approx(-6.0)
+    assert features["pressing"].iloc[0] > features["pressing"].iloc[-1]
 
 
-def test_la_ppda_mide_pases_del_rival_por_accion_defensiva() -> None:
+def test_el_territorio_se_mide_por_partido() -> None:
     features = style.build_features(_equipos())
 
-    # Equipo 0: el rival da 900 pases; el equipo hace 700 entradas + 300
-    # intercepciones = 1.000 acciones defensivas.
-    assert features["ppda"].iloc[0] == pytest.approx(0.9)
+    assert features["territory"].iloc[0] == pytest.approx(400.0 / 38.0)
 
 
-def test_la_altura_de_presion_es_la_cuota_de_entradas_en_campo_rival() -> None:
+def test_lo_que_concede_va_con_el_signo_invertido() -> None:
+    # Conceder poco es bueno, asi que el rasgo alto tiene que ser el del equipo
+    # que menos concede.
     features = style.build_features(_equipos())
 
-    assert features["pressing_height"].iloc[0] == pytest.approx(0.1)
+    assert features["chance_prevention"].iloc[0] > features["chance_prevention"].iloc[-1]
 
 
-def test_la_calidad_de_ocasion_es_npxg_por_tiro() -> None:
+def test_la_finalizacion_compara_goles_con_xg() -> None:
     features = style.build_features(_equipos())
 
-    assert features["chance_quality"].iloc[0] == pytest.approx(45.0 / 400.0)
+    assert features["finishing"].iloc[0] == pytest.approx((60.0 - 55.0) / 38.0)
 
 
 def test_sin_la_perspectiva_del_rival_no_se_puede_medir_el_estilo() -> None:
@@ -100,17 +91,17 @@ def test_sin_la_perspectiva_del_rival_no_se_puede_medir_el_estilo() -> None:
 
 def test_la_etiqueta_recoge_los_dos_rasgos_mas_extremos() -> None:
     centroide = pd.Series(
-        {"possession": 2.0, "ppda": -1.5, "shot_volume": 0.1, "chance_quality": 0.2}
+        {"pressing": 2.0, "territory": -1.5, "chance_creation": 0.1, "finishing": 0.2}
     )
 
-    assert style.describe(centroide) == "dominio del balon, presion asfixiante"
+    assert style.describe(centroide) == ("presion asfixiante, poca presencia en campo rival")
 
 
-def test_una_ppda_baja_se_lee_como_presion_alta() -> None:
-    # Detalle facil de invertir: PPDA baja significa que el rival da pocos pases
-    # por cada accion defensiva, es decir, presion alta.
-    assert style.describe(pd.Series({"ppda": -2.0}), n_rasgos=1) == "presion asfixiante"
-    assert style.describe(pd.Series({"ppda": 2.0}), n_rasgos=1) == "presion pasiva"
+def test_el_rasgo_de_presion_ya_viene_invertido() -> None:
+    # `build_features` invierte la PPDA, asi que aqui un valor alto siempre
+    # significa presionar mas. El descriptor no tiene que volver a invertirlo.
+    assert style.describe(pd.Series({"pressing": 2.0}), n_rasgos=1) == "presion asfixiante"
+    assert style.describe(pd.Series({"pressing": -2.0}), n_rasgos=1) == "presion pasiva"
 
 
 def test_un_centroide_sin_rasgos_conocidos_no_revienta() -> None:

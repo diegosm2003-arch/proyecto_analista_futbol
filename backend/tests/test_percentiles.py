@@ -10,11 +10,15 @@ from __future__ import annotations
 import pandas as pd
 
 from futbol_analytics.analysis import percentiles
-from futbol_analytics.metrics import PLAYER_METRICS
+from futbol_analytics.metrics import Metric
 
-GOLES = next(m for m in PLAYER_METRICS if m.name == "goals")
-FALTAS = next(m for m in PLAYER_METRICS if m.name == "fouls_committed")
-DESPEJES = next(m for m in PLAYER_METRICS if m.name == "clearances")
+# Metricas construidas aqui y no sacadas del catalogo: lo que se prueba es como
+# se calculan y se orientan los percentiles, no que exista una metrica concreta.
+GOLES = Metric("goals", "player_season", "goals", "Goles")
+FALTAS = Metric(
+    "fouls_committed", "player_season", "fouls", "Faltas cometidas", higher_is_better=False
+)
+DESPEJES = Metric("clearances", "player_season", "clearances", "Despejes", higher_is_better=None)
 
 LIGAS = [
     "ESP-La Liga",
@@ -122,7 +126,7 @@ def test_las_metricas_de_estilo_no_se_invierten() -> None:
 
 
 def test_sin_posesion_no_hay_percentil_ajustado() -> None:
-    entradas = next(m for m in PLAYER_METRICS if m.name == "tackles")
+    entradas = Metric("tackles", "player_season", "tackles", "Entradas", possession_sensitive=True)
     jugadores = _poblacion([5.0] * 5, LIGAS)
     jugadores["tackles"] = [10.0, 20.0, 30.0, 40.0, 50.0]
 

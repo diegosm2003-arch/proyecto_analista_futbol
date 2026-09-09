@@ -6,10 +6,14 @@ import pandas as pd
 import pytest
 
 from futbol_analytics.analysis import features
-from futbol_analytics.metrics import PLAYER_METRICS
+from futbol_analytics.metrics import Metric
 
-ENTRADAS = next(m for m in PLAYER_METRICS if m.name == "tackles")
-GOLES = next(m for m in PLAYER_METRICS if m.name == "goals")
+# Metricas construidas aqui y no sacadas del catalogo: lo que se prueba es la
+# normalizacion, no que exista una metrica concreta. El catalogo ha cambiado ya
+# de fuente una vez y estos tests no deberian romperse por eso.
+ENTRADAS = Metric("tackles", "player_season", "tackles", "Entradas", possession_sensitive=True)
+GOLES = Metric("goals", "player_season", "goals", "Goles")
+MINUTOS = Metric("minutes", "player_season", "minutes", "Minutos", per90=False)
 
 
 def _jugadores() -> pd.DataFrame:
@@ -69,9 +73,7 @@ def test_per_90_exige_los_minutos() -> None:
 
 
 def test_per_90_ignora_las_metricas_que_no_se_normalizan() -> None:
-    minutos = next(m for m in PLAYER_METRICS if m.name == "minutes")
-
-    resultado = features.per_90(_jugadores(), (minutos,))
+    resultado = features.per_90(_jugadores(), (MINUTOS,))
 
     assert "minutes_p90" not in resultado.columns
 

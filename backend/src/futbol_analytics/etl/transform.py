@@ -173,8 +173,11 @@ def add_identity(frame: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
     flat = flatten_columns(raw)
     result = frame.copy()
 
-    if "pos" in flat.columns:
-        position_raw = flat["pos"]
+    # FBref la llama "pos" y Understat "position". El formato tambien difiere
+    # ("DF,MF" frente a "D M S"), pero de eso se encarga `primary_position`.
+    columna_posicion = next((c for c in ("pos", "position") if c in flat.columns), None)
+    if columna_posicion is not None:
+        position_raw = flat[columna_posicion]
     else:
         position_raw = pd.Series(index=flat.index, dtype=object)
     result["position_raw"] = position_raw
@@ -215,12 +218,22 @@ def build_player_frame(
     selected = {
         stat_type: select_metrics(frame, metrics, stat_type) for stat_type, frame in frames.items()
     }
+    if understat is not None and not understat.empty:
+        # Understat trae hoy todo el catalogo. Se une por el mismo indice
+        # (liga, temporada, equipo, jugador) que usan las tablas de FBref, asi
+        # que convivir con ellas no exige ninguna traduccion.
+        selected["understat"] = select_metrics(
+            understat, metrics, "player_season", source="understat"
+        )
+
     merged = merge_stat_frames(selected)
     if merged.empty:
         return merged
 
     if "standard" in frames:
         merged = add_identity(merged, frames["standard"])
+    elif understat is not None and not understat.empty:
+        merged = add_identity(merged, understat)
 
     result = merged.reset_index()
     result = _normalise_keys(result, ("league", "season", "team", "player"))

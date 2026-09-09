@@ -109,12 +109,11 @@ def _prepare_players(
     seasons: list[str],
     use_cache: bool | None = None,
 ) -> pd.DataFrame:
-    frames = extract.read_player_stats(
-        stat_types(PLAYER_METRICS), leagues, seasons, use_cache=use_cache
-    )
-    # La familia xG viene de Understat: FBref sirve vacias sus tablas avanzadas.
+    # Todo el catalogo viene de Understat: FBref sirve vacias sus tablas
+    # avanzadas y unir ambas fuentes por nombre solo cruzaba el 62 % de los
+    # jugadores, porque los equipos con acento y los nombres cortos no casan.
     understat = understat_source.read_player_season_stats(leagues, seasons)
-    return transform.build_player_frame(frames, PLAYER_METRICS, understat=understat)
+    return transform.build_player_frame({}, PLAYER_METRICS, understat=understat)
 
 
 def _prepare_teams(
@@ -122,14 +121,16 @@ def _prepare_teams(
     seasons: list[str],
     use_cache: bool | None = None,
 ) -> pd.DataFrame:
-    needed = stat_types(TEAM_METRICS)
-    frames_for = extract.read_team_stats(
-        needed, leagues, seasons, opponent=False, use_cache=use_cache
-    )
-    frames_against = extract.read_team_stats(
-        needed, leagues, seasons, opponent=True, use_cache=use_cache
-    )
-    return transform.build_team_frame(frames_for, frames_against, TEAM_METRICS)
+    crudo = understat_source.read_team_season_stats(leagues, seasons)
+    if crudo.empty:
+        return crudo
+
+    # Las columnas llegan con los nombres de Understat: hay que traducirlas a
+    # las del catalogo, que son las que existen como columnas en PostgreSQL.
+    perspectivas = crudo["perspective"]
+    traducido = transform.select_metrics(crudo, TEAM_METRICS, "team_season", source="understat")
+    traducido["perspective"] = perspectivas
+    return traducido.reset_index()
 
 
 def inspect_columns(

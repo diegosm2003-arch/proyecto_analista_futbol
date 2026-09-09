@@ -73,7 +73,16 @@ def test_la_familia_xg_viene_de_understat() -> None:
     # en 2023/24, 2024/25 y 2025/26. Sin Understat no habria analisis moderno.
     de_understat = {m.name for m in metrics_from(PLAYER_METRICS, "understat")}
 
-    assert {"us_xg", "us_npxg", "us_xa", "xg_chain", "xg_buildup"} <= de_understat
+    assert {"np_xg", "xa", "xg_chain", "xg_buildup"} <= de_understat
+
+
+def test_todo_el_catalogo_viene_de_una_sola_fuente() -> None:
+    # Unir FBref y Understat por nombre solo cruzaba el 62 % de los jugadores:
+    # los equipos con acento y los nombres cortos no casan. Una sola fuente
+    # evita ese cruce fragil.
+    fuentes = {metric.source for metric in PLAYER_METRICS}
+
+    assert fuentes == {"understat"}
 
 
 def test_xg_buildup_aisla_a_quien_construye_sin_finalizar() -> None:
@@ -86,25 +95,27 @@ def test_xg_buildup_aisla_a_quien_construye_sin_finalizar() -> None:
 
 
 def test_metrics_by_stat_type_filtra_por_origen() -> None:
-    defensa = metrics_by_stat_type(PLAYER_METRICS, "defense")
+    de_temporada = metrics_by_stat_type(PLAYER_METRICS, "player_season")
 
-    assert defensa
-    assert {metric.stat_type for metric in defensa} == {"defense"}
+    assert de_temporada
+    assert {metric.stat_type for metric in de_temporada} == {"player_season"}
 
 
-def test_los_porteros_tienen_metricas_propias_y_no_las_de_campo() -> None:
+def test_a_los_porteros_no_se_les_juzga_por_metricas_de_campo() -> None:
+    # Understat no publica ninguna metrica de porteria, asi que un portero solo
+    # conserva las que no dependen de atacar. Compararlo por goles o por xG no
+    # diria nada del juego.
     porteros = {metric.name for metric in metrics_for_position(PLAYER_METRICS, "GK")}
 
-    # Paradas y goles encajados solo tienen sentido para un portero.
-    assert {"saves", "goals_against"} <= porteros
-    # Comparar a un portero por goles o regates no dice nada del juego.
     assert "goals" not in porteros
-    assert "take_ons_successful" not in porteros
+    assert "np_xg" not in porteros
+    assert "minutes" in porteros
 
 
-def test_las_metricas_de_estilo_no_se_marcan_como_buenas_ni_malas() -> None:
-    # Las entradas por tercio describen la altura de la presion. Que un equipo
-    # entre mucho en su propio tercio no es peor: es otra forma de defender.
-    for nombre in ("tackles_def_third", "tackles_att_third", "clearances"):
-        metric = next(m for m in PLAYER_METRICS if m.name == nombre)
-        assert metric.higher_is_better is None, nombre
+def test_la_ppda_no_se_marca_como_buena_ni_mala() -> None:
+    # Presionar arriba no es mejor que replegarse: describe una forma de jugar.
+    # Ademas su direccion es inversa (menos PPDA es mas presion), asi que
+    # tratarla como "mas es mejor" seria doblemente equivocado.
+    ppda = next(m for m in TEAM_METRICS if m.name == "ppda")
+
+    assert ppda.higher_is_better is None

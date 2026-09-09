@@ -4,20 +4,15 @@ Que se pinta en el grafico de un jugador es una decision futbolistica, no de
 interfaz. Por eso vive aqui, junto al catalogo de metricas, y se expone por la
 API: la interfaz y el chat usan exactamente los mismos ejes.
 
-**Doce ejes fijos por posicion, no un desplegable.** Un selector con las 45
-metricas convierte cada grafico en uno distinto e impide comparar dos jugadores
-de un vistazo, que es justo para lo que sirve un pizza chart. Doce es el limite
-practico de legibilidad: por encima, las porciones son demasiado estrechas para
-leer la etiqueta.
+**Ocho ejes fijos, no un desplegable.** Un selector con todas las metricas
+convierte cada grafico en uno distinto e impide comparar dos jugadores de un
+vistazo, que es justo para lo que sirve un pizza chart.
 
-**Tres categorias: ataque, posesion y defensa.** Es la agrupacion de FBref, ya
-conocida por quien lee este tipo de graficos, y hace evidente de un golpe de
-vista si un jugador aporta arriba, en la circulacion o atras.
-
-Las metricas se eligen por posicion, no por rol: un lateral y un central
-comparten plantilla aunque tengan roles distintos. Es deliberado, porque cambiar
-los ejes segun el rol haria incomparables dos defensas, y el rol ya se muestra
-como etiqueta junto al grafico.
+**Tres categorias: finalizacion, creacion y construccion.** No son las de FBref
+(ataque / posesion / defensa) porque Understat no publica acciones defensivas.
+Estas tres describen lo que si medimos, y separan tres formas de aportar al
+ataque que suelen confundirse: rematar, dar el ultimo pase, y participar en la
+jugada sin hacer ninguna de las dos cosas.
 """
 
 from __future__ import annotations
@@ -25,10 +20,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 # Categorias en el orden en que se recorren las porciones del grafico.
-ATTACK = "Ataque"
-POSSESSION = "Posesion"
-DEFENCE = "Defensa"
-CATEGORIES: tuple[str, ...] = (ATTACK, POSSESSION, DEFENCE)
+#
+# No son las de FBref (ataque / posesion / defensa) porque no medimos defensa:
+# Understat no publica acciones defensivas. Estas tres si describen lo que hay,
+# y ademas separan tres formas distintas de aportar al ataque que a menudo se
+# confunden en una sola cifra de goles y asistencias.
+FINISHING = "Finalizacion"
+CREATION = "Creacion"
+BUILDUP = "Construccion"
+CATEGORIES: tuple[str, ...] = (FINISHING, CREATION, BUILDUP)
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,54 +48,26 @@ def _slices(**por_categoria: tuple[str, ...]) -> tuple[Slice, ...]:
     )
 
 
+# Una sola plantilla para los jugadores de campo. Con el catalogo de Understat
+# no tiene sentido cambiar los ejes por posicion: las metricas disponibles son
+# las mismas para un central y para un delantero, y lo que los distingue es el
+# PERFIL que dibujan, no que se midan cosas distintas. Un central aparecera
+# fuerte en construccion y flojo en finalizacion, que es exactamente lo que
+# queremos que se vea de un vistazo.
+OUTFIELD_TEMPLATE: tuple[Slice, ...] = _slices(
+    Finalizacion=("np_goals", "np_xg", "shots"),
+    Creacion=("assists", "xa", "key_passes"),
+    Construccion=("xg_chain", "xg_buildup"),
+)
+
 PIZZA_TEMPLATES: dict[str, tuple[Slice, ...]] = {
-    # Defensas. El peso esta en la salida de balon y en el duelo, que es lo que
-    # separa a un central de construccion de uno de area. Se incluyen los
-    # centros al area porque son el rasgo que delata al lateral dentro del grupo.
-    "DF": _slices(
-        Ataque=("npxg", "xag", "touches_att_pen"),
-        Posesion=(
-            "passes_completed",
-            "progressive_passes",
-            "passes_into_final_third",
-            "progressive_carries",
-            "crosses_into_penalty_area",
-        ),
-        Defensa=("tackles", "interceptions", "clearances", "aerials_won"),
-    ),
-    # Centrocampistas. Reparto equilibrado: un mediocentro se juzga por lo que
-    # aporta en las tres fases, y el perfil del grafico es lo que distingue al
-    # pivote del mediapunta.
-    "MF": _slices(
-        Ataque=("npxg", "xag", "shots", "touches_att_pen"),
-        Posesion=(
-            "progressive_passes",
-            "passes_into_final_third",
-            "key_passes",
-            "progressive_carries",
-        ),
-        Defensa=("tackles", "interceptions", "ball_recoveries", "dribblers_tackled"),
-    ),
-    # Delanteros. Se muestran goles y npxG juntos a proposito: la distancia entre
-    # ambos es la historia (si finaliza por encima o por debajo de lo esperado),
-    # y ese contraste se pierde si solo se ensena uno.
-    "FW": _slices(
-        Ataque=("npxg", "goals", "shots", "touches_att_pen", "xag"),
-        Posesion=(
-            "progressive_passes_received",
-            "take_ons_successful",
-            "carries_into_penalty_area",
-            "key_passes",
-        ),
-        Defensa=("tackles", "ball_recoveries", "aerials_won"),
-    ),
+    "DF": OUTFIELD_TEMPLATE,
+    "MF": OUTFIELD_TEMPLATE,
+    "FW": OUTFIELD_TEMPLATE,
 }
 
-# Los porteros no tienen plantilla. Del catalogo publico de FBref solo se cargan
-# tres metricas de porteria (goles encajados, paradas y PSxG), y un pizza chart
-# de tres porciones no dice nada que no diga mejor una tabla. Es una limitacion
-# del dato disponible, no una decision de diseno: se resolveria anadiendo las
-# tablas avanzadas de portero al ETL.
+# Los porteros no tienen plantilla: Understat no publica ninguna metrica de
+# porteria. Es una limitacion del dato, no una decision de diseno.
 NO_TEMPLATE = ("GK",)
 
 

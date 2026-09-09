@@ -51,20 +51,20 @@ def test_el_catalogo_de_metricas_omite_las_que_no_se_normalizan(client: TestClie
     assert "minutes" not in nombres
 
 
-def test_las_metricas_de_estilo_se_marcan_como_sin_direccion(client: TestClient) -> None:
-    # Para que la interfaz no las pinte como buenas ni como malas.
+def test_la_direccion_de_cada_metrica_llega_al_cliente(client: TestClient) -> None:
+    # La interfaz no debe pintar como virtud algo que no lo es.
     metricas = {m["name"]: m for m in client.get("/meta/metrics").json()}
 
-    assert metricas["clearances"]["higher_is_better"] is None
     assert metricas["goals"]["higher_is_better"] is True
-    assert metricas["fouls_committed"]["higher_is_better"] is False
+    assert metricas["yellow_cards"]["higher_is_better"] is False
 
 
-def test_las_metricas_defensivas_se_marcan_como_ajustables(client: TestClient) -> None:
-    metricas = {m["name"]: m for m in client.get("/meta/metrics").json()}
+def test_el_catalogo_publica_las_metricas_de_construccion(client: TestClient) -> None:
+    # xGChain y xGBuildup son lo que separa al finalizador del constructor, y
+    # la interfaz necesita conocerlas para dibujar la categoria.
+    nombres = {m["name"] for m in client.get("/meta/metrics").json()}
 
-    assert metricas["tackles"]["possession_sensitive"] is True
-    assert metricas["goals"]["possession_sensitive"] is False
+    assert {"xg_chain", "xg_buildup", "np_xg", "xa"} <= nombres
 
 
 def test_los_roles_publicados_son_los_del_catalogo(client: TestClient) -> None:
@@ -162,13 +162,13 @@ def test_el_perfil_informa_del_tamano_de_la_poblacion(client: TestClient) -> Non
     assert cuerpo["population_size"] == 40
 
 
-def test_el_perfil_de_un_defensa_no_incluye_metricas_de_portero(client: TestClient) -> None:
+def test_el_perfil_de_un_defensa_trae_sus_metricas(client: TestClient) -> None:
     cuerpo = client.get("/players/DF 0/profile", params={"season": TEMPORADA}).json()
 
     nombres = {m["metric"] for m in cuerpo["metrics"]}
-    assert "saves" not in nombres
-    assert "goals_against" not in nombres
-    assert "clearances" in nombres
+    # Un defensa se juzga sobre todo por su participacion en la construccion.
+    assert "xg_buildup" in nombres
+    assert "xg_chain" in nombres
 
 
 def test_el_perfil_avisa_de_que_df_mezcla_centrales_y_laterales(client: TestClient) -> None:
@@ -236,14 +236,15 @@ def test_una_base_de_comparacion_invalida_da_422(client: TestClient) -> None:
     assert respuesta.status_code == 422
 
 
-def test_el_ajuste_por_posesion_esta_disponible_con_datos_de_equipo(client: TestClient) -> None:
+def test_sin_metricas_sensibles_a_la_posesion_no_hay_ajuste(client: TestClient) -> None:
+    # El catalogo de Understat no tiene acciones defensivas, que eran las
+    # unicas sensibles a la posesion. La maquinaria del ajuste sigue en pie
+    # para cuando vuelva a haberlas, pero hoy no se aplica a nada.
     cuerpo = client.get(
         "/players/DF 0/profile", params={"season": TEMPORADA, "basis": "padj"}
     ).json()
 
-    entradas = next(m for m in cuerpo["metrics"] if m["metric"] == "tackles")
-    assert entradas["padj"] is not None
-    assert entradas["percentile"] is not None
+    assert all(metrica["padj"] is None for metrica in cuerpo["metrics"])
 
 
 # --- Estilo de equipo -------------------------------------------------------

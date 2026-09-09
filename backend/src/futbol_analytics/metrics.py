@@ -4,25 +4,25 @@ Es la pieza central de la fase de datos: define QUE se guarda y por que tiene
 sentido futbolistico. De este catalogo se generan las columnas de las tablas de
 PostgreSQL, asi que esquema y catalogo no pueden divergir.
 
-Dos reglas de diseno:
+**La fuente es Understat.** El proyecto nacio sobre FBref, pero FBref sirve
+vacias sus tablas avanzadas: comprobado en 2023/24, 2024/25 y 2025/26, las
+paginas de pase, posesion, defensa y creacion traen la tabla completa de
+jugadores con todas las celdas de estadisticas sin un solo numero. Understat, en
+cambio, publica la familia xG entera y ademas da un identificador estable de
+jugador.
+
+El catalogo es mas corto que el que se diseno sobre FBref, pero no mas pobre:
+xGChain y xGBuildup permiten separar al finalizador del creador y del
+constructor, que es una lectura que las estadisticas de conteo no dan.
+
+Dos reglas de diseno se mantienen:
 
 1. **Se guardan totales, nunca valores por 90 minutos.** El per-90 depende del
    umbral de minutos y de la poblacion de comparacion: es una decision de
-   analisis, no un hecho que persistir. Las columnas "Per 90 Minutes" de FBref
-   se descartan al cargar.
-2. **Se guardan metricas con significado, no todo lo que FBref publica.**
-   "Pases totales" sin contexto no dice nada; "pases progresivos" o "toques en
-   el ultimo tercio" si.
+   analisis, no un hecho que persistir.
+2. **Se guardan metricas con significado, no todo lo que la fuente publica.**
 
-El campo `column` es el nombre de la columna de FBref ya aplanado por
-`etl.transform.flatten_columns` (grupo + estadistico, en snake_case).
-
-**Metricas marcadas como opcionales.** Comprobado contra FBref el 9/9/2026 para
-LaLiga 2024/25 y 2025/26: la pagina `standard` no publica el grupo de xG ni el
-de progresion, y `misc` no trae duelos aereos ni recuperaciones. No es un fallo
-de nombres: esas columnas no estan en el HTML. Se dejan en el catalogo porque el
-hueco natural es Understat, que si publica xG, npxG y xA, y porque FBref podria
-recuperarlas. Mientras tanto quedan a NULL en lugar de matar la carga.
+El campo `column` es el nombre que usa la fuente.
 """
 
 from __future__ import annotations
@@ -91,160 +91,48 @@ class Metric:
 # fmt: off
 PLAYER_METRICS: tuple[Metric, ...] = (
     # --- Volumen de juego. No son metricas de rendimiento: son el denominador.
-    Metric("matches_played", "standard", "playing_time_mp", "Partidos jugados",
-           dtype="int", per90=False, higher_is_better=None),
-    Metric("starts", "standard", "playing_time_starts", "Titularidades",
-           dtype="int", per90=False, higher_is_better=None),
-    Metric("minutes", "standard", "playing_time_min", "Minutos",
-           dtype="int", per90=False, higher_is_better=None),
+    Metric("minutes", "player_season", "minutes", "Minutos",
+           dtype="int", per90=False, higher_is_better=None, source="understat"),
+    Metric("matches_played", "player_season", "matches", "Partidos jugados",
+           dtype="int", per90=False, higher_is_better=None, source="understat"),
 
-    # --- Produccion ofensiva.
-    Metric("goals", "standard", "performance_gls", "Goles", positions=OUTFIELD),
-    Metric("assists", "standard", "performance_ast", "Asistencias", positions=OUTFIELD),
-    # npxG separa el merito del juego del merito de tirar penaltis, que dice mas
-    # de quien es el designado que del rendimiento del jugador.
-    Metric("npxg", "standard", "expected_npxg", "xG sin penaltis",
-           positions=OUTFIELD, required=False),
-    Metric("xg", "standard", "expected_xg", "xG", positions=OUTFIELD, required=False),
-    Metric("xag", "standard", "expected_xag", "xAG (goles esperados asistidos)",
-           positions=OUTFIELD, required=False),
-
-    # --- Progresion: mover el balon hacia la porteria rival.
-    Metric("progressive_carries", "standard", "progression_prgc",
-           "Conducciones progresivas", positions=OUTFIELD, required=False),
-    Metric("progressive_passes", "standard", "progression_prgp",
-           "Pases progresivos", positions=OUTFIELD, required=False),
-    Metric("progressive_passes_received", "standard", "progression_prgr",
-           "Pases progresivos recibidos", positions=OUTFIELD, required=False),
-
-    # --- Tiro.
-    Metric("shots", "shooting", "standard_sh", "Tiros", positions=OUTFIELD),
-    Metric("shots_on_target", "shooting", "standard_sot", "Tiros a puerta",
-           positions=OUTFIELD),
-    # La distancia media de tiro no es mejor alta ni baja: describe el perfil.
-    Metric("avg_shot_distance", "shooting", "standard_dist", "Distancia media de tiro",
-           positions=OUTFIELD, higher_is_better=None, per90=False, required=False),
-
-    # --- Pase.
-    Metric("passes_completed", "passing", "total_cmp", "Pases completados",
-           positions=OUTFIELD),
-    Metric("passes_attempted", "passing", "total_att", "Pases intentados",
-           positions=OUTFIELD, higher_is_better=None),
-    Metric("progressive_pass_distance", "passing", "total_prgdist",
-           "Distancia progresiva de pase", positions=OUTFIELD),
-    Metric("key_passes", "passing", "kp", "Pases clave", positions=OUTFIELD),
-    Metric("passes_into_final_third", "passing", "1_3", "Pases al ultimo tercio",
-           positions=OUTFIELD),
-    Metric("passes_into_penalty_area", "passing", "ppa", "Pases al area",
-           positions=OUTFIELD),
-    Metric("crosses_into_penalty_area", "passing", "crspa", "Centros al area",
-           positions=OUTFIELD),
-    Metric("xa", "passing", "expected_xa", "xA (asistencias esperadas)",
-           positions=OUTFIELD, required=False),
-
-    # --- Creacion: acciones que terminan en tiro o en gol.
-    Metric("shot_creating_actions", "goal_shot_creation", "sca_sca",
-           "Acciones que generan tiro", positions=OUTFIELD),
-    Metric("goal_creating_actions", "goal_shot_creation", "gca_gca",
-           "Acciones que generan gol", positions=OUTFIELD),
-
-    # --- Defensa. El reparto por tercios describe la altura de la presion, que
-    #     es informacion de estilo y no de calidad: higher_is_better=None.
-    #     Todas son sensibles a la posesion: sin ajustar, el jugador del equipo
-    #     que menos balon tiene sale sistematicamente mejor, y eso mide al
-    #     equipo, no al jugador.
-    Metric("tackles", "defense", "tackles_tkl", "Entradas",
-           positions=OUTFIELD, possession_sensitive=True),
-    Metric("tackles_won", "defense", "tackles_tklw", "Entradas ganadas",
-           positions=OUTFIELD, possession_sensitive=True),
-    Metric("tackles_def_third", "defense", "tackles_def_3rd",
-           "Entradas en tercio defensivo", positions=OUTFIELD,
-           higher_is_better=None, possession_sensitive=True),
-    Metric("tackles_mid_third", "defense", "tackles_mid_3rd",
-           "Entradas en tercio medio", positions=OUTFIELD,
-           higher_is_better=None, possession_sensitive=True),
-    Metric("tackles_att_third", "defense", "tackles_att_3rd",
-           "Entradas en tercio ofensivo", positions=OUTFIELD,
-           higher_is_better=None, possession_sensitive=True),
-    Metric("dribblers_challenged", "defense", "challenges_att",
-           "Regateadores desafiados", positions=OUTFIELD,
-           higher_is_better=None, possession_sensitive=True),
-    Metric("dribblers_tackled", "defense", "challenges_tkl",
-           "Regateadores frenados", positions=OUTFIELD, possession_sensitive=True),
-    Metric("blocks", "defense", "blocks_blocks", "Bloqueos",
-           positions=OUTFIELD, possession_sensitive=True),
-    Metric("interceptions", "defense", "int", "Intercepciones",
-           positions=OUTFIELD, possession_sensitive=True),
-    Metric("clearances", "defense", "clr", "Despejes",
-           positions=("DF", "MF"), higher_is_better=None, possession_sensitive=True),
-
-    # --- Posesion. Los toques por zona son la base para separar roles (central
-    #     vs lateral, interior vs extremo) en el clustering de la fase 3, que es
-    #     justo lo que FBref no da como posicion detallada.
-    Metric("touches", "possession", "touches_touches", "Toques", higher_is_better=None),
-    Metric("touches_def_third", "possession", "touches_def_3rd",
-           "Toques en tercio defensivo", higher_is_better=None),
-    Metric("touches_mid_third", "possession", "touches_mid_3rd",
-           "Toques en tercio medio", higher_is_better=None),
-    Metric("touches_att_third", "possession", "touches_att_3rd",
-           "Toques en tercio ofensivo", higher_is_better=None),
-    Metric("touches_att_pen", "possession", "touches_att_pen", "Toques en area rival",
-           positions=OUTFIELD, higher_is_better=None),
-    Metric("take_ons_attempted", "possession", "take_ons_att", "Regates intentados",
-           positions=OUTFIELD, higher_is_better=None),
-    Metric("take_ons_successful", "possession", "take_ons_succ", "Regates completados",
-           positions=OUTFIELD),
-    Metric("carries", "possession", "carries_carries", "Conducciones",
-           higher_is_better=None),
-    Metric("carries_into_final_third", "possession", "carries_1_3",
-           "Conducciones al ultimo tercio", positions=OUTFIELD),
-    Metric("carries_into_penalty_area", "possession", "carries_cpa",
-           "Conducciones al area", positions=OUTFIELD),
-    Metric("passes_received", "possession", "rec", "Pases recibidos",
-           positions=OUTFIELD, higher_is_better=None),
-
-    # --- Duelos y recuperaciones. Los duelos aereos NO se marcan como sensibles
-    #     a la posesion: dependen sobre todo de si el rival juega en largo, que
-    #     es otra cosa distinta a cuanto balon tiene el equipo propio.
-    Metric("aerials_won", "misc", "aerial_duels_won", "Duelos aereos ganados", required=False),
-    Metric("aerials_lost", "misc", "aerial_duels_lost", "Duelos aereos perdidos",
-           higher_is_better=None, required=False),
-    Metric("ball_recoveries", "misc", "performance_recov", "Recuperaciones",
-           higher_is_better=None, possession_sensitive=True, required=False),
-    Metric("fouls_committed", "misc", "performance_fls", "Faltas cometidas",
-           higher_is_better=False),
-
-    # --- Porteros.
-    Metric("goals_against", "keeper", "performance_ga", "Goles encajados",
-           positions=("GK",), higher_is_better=False),
-    Metric("saves", "keeper", "performance_saves", "Paradas", positions=("GK",)),
-    # PSxG menos goles encajados es la mejor medida publica de si un portero
-    # para mas de lo esperado dado el tiro que recibe.
-    Metric("post_shot_xg", "keeper_adv", "expected_psxg", "PSxG",
-           positions=("GK",), higher_is_better=None, required=False),
-
-    # --- Understat. FBref sirve vacias sus tablas avanzadas, asi que la familia
-    #     xG viene de aqui. Son metricas de modelo, no de conteo: dicen cuanto
-    #     valia una ocasion, no cuantas hubo.
-    Metric("us_xg", "player_season", "xg", "xG (Understat)",
+    # --- Finalizacion. Que hace el jugador cuando le toca rematar.
+    Metric("goals", "player_season", "goals", "Goles",
            positions=OUTFIELD, source="understat"),
-    Metric("us_npxg", "player_season", "np_xg", "xG sin penaltis (Understat)",
+    # Sin penaltis: quien los tira dice mas del designado que del jugador.
+    Metric("np_goals", "player_season", "np_goals", "Goles sin penaltis",
            positions=OUTFIELD, source="understat"),
-    Metric("us_xa", "player_season", "xa", "xA (Understat)",
+    Metric("np_xg", "player_season", "np_xg", "xG sin penaltis",
            positions=OUTFIELD, source="understat"),
-    Metric("us_shots", "player_season", "shots", "Tiros (Understat)",
+    Metric("shots", "player_season", "shots", "Tiros",
            positions=OUTFIELD, source="understat"),
-    Metric("us_key_passes", "player_season", "key_passes", "Pases clave (Understat)",
+
+    # --- Creacion. Lo que genera para otros.
+    Metric("assists", "player_season", "assists", "Asistencias",
            positions=OUTFIELD, source="understat"),
-    # xGChain reparte el xG de una jugada entre todos los que la tocaron.
-    # Premia estar en las posesiones que acaban en tiro, se remate o no.
+    Metric("xa", "player_season", "xa", "xA (asistencias esperadas)",
+           positions=OUTFIELD, source="understat"),
+    Metric("key_passes", "player_season", "key_passes", "Pases clave",
+           positions=OUTFIELD, source="understat"),
+
+    # --- Construccion. La aportacion que no acaba en sus botas.
+    #
+    # xGChain reparte el xG de una jugada entre todos los que la tocaron: mide
+    # estar en las posesiones que acaban en tiro, se remate o no.
     Metric("xg_chain", "player_season", "xg_chain", "xGChain",
            positions=OUTFIELD, source="understat"),
     # xGBuildup es xGChain quitando el tiro y la asistencia. Aisla a quien
-    # construye sin finalizar: es la metrica que descubre organizadores que
-    # ninguna estadistica de conteo refleja.
+    # construye sin finalizar, que es el perfil que ninguna estadistica de
+    # conteo refleja: el central que saca el balon o el pivote que hace de
+    # bisagra no aparecen en goles ni en asistencias.
     Metric("xg_buildup", "player_season", "xg_buildup", "xGBuildup",
            positions=OUTFIELD, source="understat"),
+
+    # --- Disciplina.
+    Metric("yellow_cards", "player_season", "yellow_cards", "Tarjetas amarillas",
+           higher_is_better=False, source="understat"),
+    Metric("red_cards", "player_season", "red_cards", "Tarjetas rojas",
+           higher_is_better=False, source="understat"),
 )
 # fmt: on
 
@@ -254,40 +142,23 @@ PLAYER_METRICS: tuple[Metric, ...] = (
 # ---------------------------------------------------------------------------
 
 # Se cargan dos filas por equipo y temporada: lo que hace el equipo
-# (perspective="for") y lo que le hacen (perspective="against"). Con ambas se
-# pueden derivar en la fase de analisis indicadores de estilo como una PPDA
-# aproximada: pases del rival por accion defensiva propia.
+# (perspective="for") y lo que le hacen (perspective="against").
 # fmt: off
 TEAM_METRICS: tuple[Metric, ...] = (
-    Metric("matches_played", "standard", "playing_time_mp", "Partidos jugados",
-           dtype="int", per90=False, higher_is_better=None),
-    Metric("minutes", "standard", "playing_time_min", "Minutos",
-           dtype="int", per90=False, higher_is_better=None),
-    Metric("goals", "standard", "performance_gls", "Goles"),
-    Metric("xg", "standard", "expected_xg", "xG", required=False),
-    Metric("npxg", "standard", "expected_npxg", "xG sin penaltis", required=False),
-    Metric("progressive_passes", "standard", "progression_prgp", "Pases progresivos",
-           required=False),
-    Metric("progressive_carries", "standard", "progression_prgc",
-           "Conducciones progresivas", required=False),
-    Metric("shots", "shooting", "standard_sh", "Tiros"),
-    Metric("shots_on_target", "shooting", "standard_sot", "Tiros a puerta"),
-    Metric("passes_completed", "passing", "total_cmp", "Pases completados"),
-    Metric("passes_attempted", "passing", "total_att", "Pases intentados",
-           higher_is_better=None),
-    Metric("passes_into_final_third", "passing", "1_3", "Pases al ultimo tercio"),
-    Metric("tackles", "defense", "tackles_tkl", "Entradas", higher_is_better=None),
-    Metric("tackles_att_third", "defense", "tackles_att_3rd",
-           "Entradas en tercio ofensivo", higher_is_better=None),
-    Metric("interceptions", "defense", "int", "Intercepciones", higher_is_better=None),
-    Metric("touches_att_third", "possession", "touches_att_3rd",
-           "Toques en tercio ofensivo", higher_is_better=None),
-    # Posesion media del equipo. Es la que permite ajustar por posesion las
-    # metricas defensivas de sus jugadores. Opcional porque no esta claro en que
-    # tabla la publica FBref para todas las temporadas; si falta, el analisis
-    # cae en una aproximacion a partir de los pases propios y del rival.
-    Metric("possession_pct", "possession", "poss", "Posesion (%)",
-           higher_is_better=None, per90=False, required=False),
+    Metric("matches_played", "team_season", "matches", "Partidos jugados",
+           dtype="int", per90=False, higher_is_better=None, source="understat"),
+    Metric("goals", "team_season", "goals", "Goles", source="understat"),
+    Metric("xg", "team_season", "xg", "xG", source="understat"),
+    Metric("np_xg", "team_season", "np_xg", "xG sin penaltis", source="understat"),
+    # Pases completados a menos de 20 metros de la porteria: mide cuanto
+    # territorio de verdad pisa el equipo, no cuanto balon tiene.
+    Metric("deep_completions", "team_season", "deep_completions",
+           "Llegadas a zona de remate", source="understat"),
+    # PPDA real de Understat, no la aproximacion sobre todo el campo que se
+    # derivaba antes. Un valor BAJO significa presion alta: el rival da pocos
+    # pases por cada accion defensiva.
+    Metric("ppda", "team_season", "ppda", "PPDA",
+           higher_is_better=None, per90=False, source="understat"),
 )
 # fmt: on
 

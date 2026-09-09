@@ -1,14 +1,17 @@
 """Clustering de estilo de equipo.
 
-Al reves que en los roles de jugador, aqui **el contexto es el objeto de
-estudio**: se quiere saber cuanto balon tiene un equipo y donde defiende, no
-depurarlo. Por eso las features son magnitudes con unidades y no proporciones
-neutras.
+Al reves que en los perfiles de jugador, aqui **el contexto es el objeto de
+estudio**: se quiere saber como presiona un equipo y cuanto territorio pisa, no
+depurarlo.
 
-Los grupos no se nombran de antemano, como si se hace con los roles: los estilos
-cambian de temporada en temporada y fijar una lista seria forzar la realidad. En
-su lugar, cada cluster se describe por sus rasgos mas extremos, lo que produce
-etiquetas legibles ("dominio del balon, presion adelantada") sin inventar
+Los rasgos salen de Understat, que publica **la PPDA real** por partido. Hasta
+ahora se derivaba una aproximacion sobre todo el campo a partir de los pases del
+rival, que ordenaba bien a los equipos pero no era comparable con la PPDA que
+publica nadie mas. Esa salvedad desaparece.
+
+Los grupos no se nombran de antemano: los estilos cambian de temporada en
+temporada y fijar una lista seria forzar la realidad. Cada cluster se describe
+por sus rasgos mas extremos, lo que produce etiquetas legibles sin inventar
 categorias.
 """
 
@@ -33,14 +36,11 @@ DEFAULT_STYLES = 5
 # Como se lee cada rasgo cuando esta muy por encima o muy por debajo de la media.
 # Es el vocabulario con el que se construyen las etiquetas.
 DESCRIPTORS: dict[str, tuple[str, str]] = {
-    "possession": ("dominio del balon", "juego sin balon"),
-    "passes_p90": ("mucho volumen de pase", "juego directo"),
-    "progression_p90": ("progresion constante", "poca progresion"),
-    "ppda": ("presion pasiva", "presion asfixiante"),
-    "pressing_height": ("presion adelantada", "bloque bajo"),
-    "final_third_presence": ("campo rival como territorio", "poca presencia en campo rival"),
-    "shot_volume": ("mucho volumen de tiro", "poco volumen de tiro"),
-    "chance_quality": ("ocasiones claras", "ocasiones de baja calidad"),
+    "pressing": ("presion asfixiante", "presion pasiva"),
+    "territory": ("campo rival como territorio", "poca presencia en campo rival"),
+    "chance_creation": ("genera mucho peligro", "genera poco peligro"),
+    "chance_prevention": ("concede poco", "concede mucho"),
+    "finishing": ("finaliza por encima de lo esperado", "desperdicia ocasiones"),
 }
 
 
@@ -58,7 +58,7 @@ def build_features(teams: pd.DataFrame) -> pd.DataFrame:
     """Construye los rasgos de estilo a partir de las dos perspectivas.
 
     Necesita `team_season` con las filas `for` y `against`: sin la del rival no
-    se puede calcular nada que dependa de el, empezando por la presion.
+    se puede medir ni lo que concede ni cuanto le presionan.
     """
     claves = ["league", "season", "team"]
     a_favor = teams[teams["perspective"] == "for"].set_index(claves)
@@ -66,36 +66,30 @@ def build_features(teams: pd.DataFrame) -> pd.DataFrame:
     if a_favor.empty or en_contra.empty:
         raise ValueError("Hacen falta las filas 'for' y 'against' de cada equipo.")
 
-    noventas = pd.to_numeric(a_favor["minutes"], errors="coerce") / 90.0
-    noventas = noventas.where(noventas > 0)
+    partidos = pd.to_numeric(a_favor["matches_played"], errors="coerce")
+    partidos = partidos.where(partidos > 0)
 
     features = pd.DataFrame(index=a_favor.index)
-    features["passes_p90"] = a_favor["passes_attempted"] / noventas
-    features["progression_p90"] = a_favor["progressive_passes"] / noventas
-    features["final_third_presence"] = a_favor["touches_att_third"] / noventas
-    features["shot_volume"] = a_favor["shots"] / noventas
-    # Calidad de ocasion: npxG por tiro. Distingue al equipo que tira mucho de
-    # lejos del que genera pocas ocasiones pero claras.
-    tiros = pd.to_numeric(a_favor["shots"], errors="coerce")
-    features["chance_quality"] = a_favor["npxg"] / tiros.where(tiros > 0)
 
-    pases_propios = pd.to_numeric(a_favor["passes_attempted"], errors="coerce")
-    pases_rival = pd.to_numeric(en_contra["passes_attempted"], errors="coerce")
-    total = pases_propios.add(pases_rival)
-    features["possession"] = (pases_propios / total.where(total > 0)) * 100.0
+    # PPDA real de Understat. Se invierte el signo para que, como todos los
+    # demas rasgos, "mas alto" signifique "mas de eso": un PPDA bajo es presion
+    # alta, y dejarlo sin invertir haria que la etiqueta dijese lo contrario de
+    # lo que pasa.
+    features["pressing"] = -pd.to_numeric(a_favor["ppda"], errors="coerce")
 
-    # PPDA aproximada: pases que el rival completa por cada accion defensiva
-    # propia. La PPDA canonica se limita al 60 % del campo del rival y FBref no
-    # publica el pase rival por zonas, asi que esto ordena bien a los equipos
-    # pero no es comparable con la PPDA de otras fuentes. Un valor BAJO es
-    # presion alta, por eso el descriptor esta invertido.
-    acciones = pd.to_numeric(a_favor["tackles"], errors="coerce").add(
-        pd.to_numeric(a_favor["interceptions"], errors="coerce")
-    )
-    features["ppda"] = pases_rival / acciones.where(acciones > 0)
+    # Llegadas a zona de remate por partido: cuanto territorio pisa de verdad,
+    # que no es lo mismo que cuanto balon tiene.
+    features["territory"] = a_favor["deep_completions"] / partidos
+    features["chance_creation"] = a_favor["np_xg"] / partidos
+    # Lo que concede, con el signo invertido por la misma razon que la presion.
+    features["chance_prevention"] = -(en_contra["np_xg"] / partidos)
 
-    entradas = pd.to_numeric(a_favor["tackles"], errors="coerce")
-    features["pressing_height"] = a_favor["tackles_att_third"] / entradas.where(entradas > 0)
+    # Goles menos xG: si finaliza por encima o por debajo de lo esperado. Es
+    # rendimiento, no estilo, pero separa equipos que se parecen en todo lo
+    # demas y explica clasificaciones que el xG solo no explica.
+    goles = pd.to_numeric(a_favor["goals"], errors="coerce")
+    xg = pd.to_numeric(a_favor["np_xg"], errors="coerce")
+    features["finishing"] = (goles - xg) / partidos
 
     return features
 

@@ -121,7 +121,7 @@ def read_team_season_stats(
 
     partidos = _understat(ligas, temporadas).read_team_match_stats().reset_index()
 
-    piezas = []
+    piezas, piezas_contra = [], []
     for lado in ("home", "away"):
         pieza = partidos[
             [
@@ -147,15 +147,52 @@ def read_team_season_stats(
         ]
         piezas.append(pieza)
 
+    # Y ahora lo que le hacen: en cada partido, lo del rival atribuido a este
+    # equipo. Sin esta perspectiva no se puede medir ni lo que concede ni cuanto
+    # le presionan a el.
+    for lado, rival in (("home", "away"), ("away", "home")):
+        pieza = partidos[
+            [
+                "league",
+                "season",
+                f"{lado}_team",
+                f"{rival}_xg",
+                f"{rival}_np_xg",
+                f"{rival}_ppda",
+                f"{rival}_deep_completions",
+                f"{rival}_goals",
+            ]
+        ].copy()
+        pieza.columns = [
+            "league",
+            "season",
+            "team",
+            "xg",
+            "np_xg",
+            "ppda",
+            "deep_completions",
+            "goals",
+        ]
+        pieza["perspective"] = "against"
+        piezas_contra.append(pieza)
+
     apilado = pd.concat(piezas, ignore_index=True)
-    agregado = apilado.groupby(["league", "season", "team"]).agg(
-        xg=("xg", "sum"),
-        np_xg=("np_xg", "sum"),
-        goals=("goals", "sum"),
-        deep_completions=("deep_completions", "sum"),
-        # Promedio, no suma: la PPDA es un ratio.
-        ppda=("ppda", "mean"),
-        matches=("xg", "size"),
-    )
+
+    def _agrupar(frame: pd.DataFrame, perspectiva: str) -> pd.DataFrame:
+        resultado = frame.groupby(["league", "season", "team"]).agg(
+            xg=("xg", "sum"),
+            np_xg=("np_xg", "sum"),
+            goals=("goals", "sum"),
+            deep_completions=("deep_completions", "sum"),
+            # Promedio, no suma: la PPDA es un ratio.
+            ppda=("ppda", "mean"),
+            matches=("xg", "size"),
+        )
+        resultado["perspective"] = perspectiva
+        return resultado
+
+    a_favor = _agrupar(apilado, "for")
+    en_contra = _agrupar(pd.concat(piezas_contra, ignore_index=True), "against")
+    agregado = pd.concat([a_favor, en_contra])
     logger.info("Equipos de Understat agregados", extra={"filas": len(agregado)})
     return agregado

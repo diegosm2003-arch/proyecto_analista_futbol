@@ -15,7 +15,34 @@ from futbol_analytics.etl.transform import (
     slugify,
     to_records,
 )
-from futbol_analytics.metrics import PLAYER_METRICS, metrics_by_stat_type
+from futbol_analytics.metrics import Metric, metrics_by_stat_type
+
+# Catalogo propio del test. Se prueba la limpieza de tablas de FBref, que sigue
+# existiendo aunque el catalogo real haya pasado a Understat: no conviene que
+# estos tests dependan de que fuente este activa hoy.
+CATALOGO: tuple[Metric, ...] = (
+    Metric(
+        "minutes",
+        "standard",
+        "playing_time_min",
+        "Minutos",
+        dtype="int",
+        per90=False,
+        higher_is_better=None,
+    ),
+    Metric("goals", "standard", "performance_gls", "Goles"),
+    Metric("assists", "standard", "performance_ast", "Asistencias"),
+    Metric("tackles", "defense", "tackles_tkl", "Entradas"),
+    Metric(
+        "tackles_att_third",
+        "defense",
+        "tackles_att_3rd",
+        "Entradas en campo rival",
+        higher_is_better=None,
+    ),
+    Metric("interceptions", "defense", "int", "Intercepciones"),
+    Metric("post_shot_xg", "keeper_adv", "expected_psxg", "PSxG", required=False),
+)
 
 INDICE = pd.MultiIndex.from_tuples(
     [
@@ -33,7 +60,7 @@ def _frame(stat_type: str, overrides: dict[str, list] | None = None) -> pd.DataF
     Se genera desde el propio catalogo para que el test no se rompa cada vez que
     se anade una metrica: lo que se comprueba es el comportamiento, no la lista.
     """
-    metrics = metrics_by_stat_type(PLAYER_METRICS, stat_type)
+    metrics = metrics_by_stat_type(CATALOGO, stat_type)
     data: dict[str, list] = {
         metric.column: [float(i + 1) for i in range(len(INDICE))] for metric in metrics
     }
@@ -105,10 +132,10 @@ def test_flatten_columns_acepta_cabeceras_de_un_solo_nivel() -> None:
 
 
 def test_select_metrics_traduce_a_nombres_canonicos() -> None:
-    seleccion = select_metrics(_standard(), PLAYER_METRICS, "standard")
+    seleccion = select_metrics(_standard(), CATALOGO, "standard")
 
     assert "minutes" in seleccion.columns
-    assert "progressive_passes" in seleccion.columns
+    assert "assists" in seleccion.columns
     # La identidad no es una metrica: se anade por separado.
     assert "pos" not in seleccion.columns
 
@@ -119,20 +146,20 @@ def test_select_metrics_falla_si_falta_una_columna_obligatoria() -> None:
     frame = _standard().drop(columns=["playing_time_min"])
 
     with pytest.raises(MissingColumnsError, match="playing_time_min"):
-        select_metrics(frame, PLAYER_METRICS, "standard")
+        select_metrics(frame, CATALOGO, "standard")
 
 
 def test_select_metrics_tolera_la_ausencia_de_una_metrica_opcional() -> None:
-    opcional = next(m for m in PLAYER_METRICS if not m.required)
+    opcional = next(m for m in CATALOGO if not m.required)
     frame = _frame(opcional.stat_type).drop(columns=[opcional.column])
 
-    seleccion = select_metrics(frame, PLAYER_METRICS, opcional.stat_type)
+    seleccion = select_metrics(frame, CATALOGO, opcional.stat_type)
 
     assert seleccion[opcional.name].isna().all()
 
 
 def test_select_metrics_devuelve_vacio_si_el_stat_type_no_esta_en_el_catalogo() -> None:
-    seleccion = select_metrics(_standard(), PLAYER_METRICS, "passing_types")
+    seleccion = select_metrics(_standard(), CATALOGO, "passing_types")
 
     assert seleccion.empty or list(seleccion.columns) == []
 
@@ -141,7 +168,7 @@ def test_select_metrics_devuelve_vacio_si_el_stat_type_no_esta_en_el_catalogo() 
 
 
 def test_build_player_frame_deriva_el_grupo_de_posicion() -> None:
-    resultado = build_player_frame({"standard": _standard()}, PLAYER_METRICS)
+    resultado = build_player_frame({"standard": _standard()}, CATALOGO)
 
     posiciones = dict(zip(resultado["player"], resultado["position_group"], strict=True))
     assert posiciones["Pedri"] == "MF"
@@ -151,7 +178,7 @@ def test_build_player_frame_deriva_el_grupo_de_posicion() -> None:
 
 
 def test_build_player_frame_conserva_la_posicion_cruda_de_fbref() -> None:
-    resultado = build_player_frame({"standard": _standard()}, PLAYER_METRICS)
+    resultado = build_player_frame({"standard": _standard()}, CATALOGO)
 
     assert set(resultado["position_raw"].dropna()) == {"MF", "DF"}
 
@@ -161,7 +188,7 @@ def test_build_player_frame_no_filtra_por_minutos() -> None:
     # en la base de datos. Filtrar en el ETL perderia el dato para siempre.
     frame = _standard({"playing_time_min": [2800.0, 1500.0, 12.0]})
 
-    resultado = build_player_frame({"standard": frame}, PLAYER_METRICS)
+    resultado = build_player_frame({"standard": frame}, CATALOGO)
 
     assert len(resultado) == 3
     assert resultado["minutes"].min() == 12.0
@@ -169,7 +196,7 @@ def test_build_player_frame_no_filtra_por_minutos() -> None:
 
 def test_build_player_frame_une_varias_tablas_por_el_indice() -> None:
     resultado = build_player_frame(
-        {"standard": _standard(), "defense": _frame("defense")}, PLAYER_METRICS
+        {"standard": _standard(), "defense": _frame("defense")}, CATALOGO
     )
 
     assert {"minutes", "interceptions", "tackles_att_third"} <= set(resultado.columns)
@@ -185,13 +212,13 @@ def test_build_player_frame_descarta_filas_sin_clave() -> None:
     frame = _standard().iloc[:2].copy()
     frame.index = indice
 
-    resultado = build_player_frame({"standard": frame}, PLAYER_METRICS)
+    resultado = build_player_frame({"standard": frame}, CATALOGO)
 
     assert list(resultado["player"]) == ["Pedri"]
 
 
 def test_build_player_frame_sin_datos_devuelve_vacio() -> None:
-    assert build_player_frame({}, PLAYER_METRICS).empty
+    assert build_player_frame({}, CATALOGO).empty
 
 
 # --- Utilidades -------------------------------------------------------------
