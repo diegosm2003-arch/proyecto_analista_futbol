@@ -52,6 +52,10 @@ class ApiClient:
     def roles(self) -> list[dict[str, Any]]:
         return self._get("/meta/roles")
 
+    def insights(self, season: str) -> list[dict[str, Any]]:
+        """Hallazgos de la temporada cargada."""
+        return self._get("/meta/insights", params={"season": season})
+
     def templates(self) -> list[dict[str, Any]]:
         return self._get("/meta/templates")
 

@@ -178,6 +178,7 @@ def _barra_de_filtros(
                 "Temporada",
                 catalogo["seasons"],
                 index=catalogo["seasons"].index(temporada),
+                format_func=presentation.season_label,
                 key="temporada_activa",
             )
         with posicion_c:
@@ -725,7 +726,7 @@ def _subtitulo(perfil: dict) -> str:
     rol = ficha["detailed_position"] or ficha["position_group"] or "sin posicion"
     base = "por 90 min" if perfil["basis"] == "per90" else "ajustado por posesion"
     return (
-        f"{rol} | {ficha['season']} | {base} | "
+        f"{rol} | {presentation.season_label(ficha['season'])} | {base} | "
         f"percentil frente a {perfil['population_size']} jugadores"
     )
 

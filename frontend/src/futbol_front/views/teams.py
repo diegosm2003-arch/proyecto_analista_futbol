@@ -93,10 +93,13 @@ def _filtros(catalogo: dict) -> tuple[str, int]:
         temporada_c, estilos_c = st.columns([1, 3])
         with temporada_c:
             temporada = st.selectbox(
-                "Temporada", catalogo["seasons"], index=len(catalogo["seasons"]) - 1
+                "Temporada",
+                catalogo["seasons"],
+                index=len(catalogo["seasons"]) - 1,
+                format_func=presentation.season_label,
             )
         with estilos_c:
-            n_estilos = st.slider("Numero de estilos", min_value=2, max_value=12, value=6)
+            n_estilos = st.slider("Numero de estilos", min_value=2, max_value=16, value=6)
         st.caption(
             "Los equipos se agrupan por como juegan, no por lo bien que juegan. Los estilos "
             "no estan definidos de antemano: cada grupo se describe por sus rasgos mas "
@@ -160,7 +163,9 @@ def _mapa(informe: dict, temporada: str, paleta: Palette) -> None:
         st.info("Ningun equipo tiene territorio y presion calculables.")
         return
 
-    figura = charts.style_map(datos, f"Estilos de juego - {temporada}", paleta)
+    figura = charts.style_map(
+        datos, f"Estilos de juego - {presentation.season_label(temporada)}", paleta
+    )
     st.pyplot(figura, width="content")
     st.download_button(
         "Descargar mapa (PNG)",

@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import streamlit as st
 
+from futbol_front import branding
 from futbol_front.client import ApiError
-from futbol_front.state import cached_catalog
+from futbol_front.presentation import season_label
+from futbol_front.state import cached_catalog, cached_insights
 from futbol_front.theme import apply
 
 # Clave en el estado de sesion con la vista elegida. La navegacion no usa las
@@ -41,9 +43,9 @@ def render() -> None:
     apply(None)
 
     st.markdown(
-        """
+        f"""
         <div style="padding: 2.2rem 0 0.6rem 0;">
-          <div class="cinta-liga">Big 5 &middot; Temporada en curso</div>
+          <div class="marca-portada">{branding.logo_html(64)}</div>
           <h1 style="font-size: 3rem; margin: .6rem 0 .2rem 0;">Futbol Analytics</h1>
           <p style="color:#8D9AB4; font-size:1.05rem; max-width: 46rem; line-height:1.6;">
             Percentiles por posicion frente a las cinco grandes ligas, perfiles de rol,
@@ -84,7 +86,7 @@ def render() -> None:
         principal=False,
     )
 
-    _que_hay_cargado()
+    _hallazgos()
 
 
 # Iconos en SVG y no con la fuente de iconos de Streamlit: dentro de un bloque
@@ -138,6 +140,61 @@ def _tarjeta(
             on_click=ir_a,
             args=(destino,),
         )
+
+
+def _hallazgos() -> None:
+    """Lo que los datos cargados tienen de interesante hoy.
+
+    Sustituye a un recuento de temporadas y ligas, que eran metadatos de
+    instalacion y no analisis. El criterio de valor del proyecto no es tecnico:
+    un analisis vale si se puede resumir en una frase que a un aficionado
+    avanzado le resulte interesante, y la portada es donde eso tiene que
+    demostrarse antes que en ningun otro sitio.
+    """
+    try:
+        catalogo = cached_catalog()
+    except ApiError as error:
+        st.error(f"La API no responde: {error}")
+        return
+
+    if not catalogo["seasons"]:
+        st.warning("No hay datos cargados todavia.")
+        return
+
+    temporada = catalogo["seasons"][-1]
+    try:
+        hallazgos = cached_insights(temporada)
+    except ApiError as error:
+        st.error(str(error))
+        return
+
+    st.divider()
+    st.subheader(f"Lo que dicen los datos · {season_label(temporada)}")
+    st.caption(
+        "Calculado sobre las cinco grandes ligas. Cada dato viene con como hay que "
+        "leerlo, porque casi todos los extremos de una temporada empezada son ruido."
+    )
+
+    if not hallazgos:
+        st.info("Aun no hay suficientes datos cargados para sacar conclusiones.")
+        return
+
+    for inicio_fila in range(0, len(hallazgos), 2):
+        columnas = st.columns(2, gap="large")
+        for columna, hallazgo in zip(
+            columnas, hallazgos[inicio_fila : inicio_fila + 2], strict=False
+        ):
+            with columna, st.container(border=True):
+                st.markdown(
+                    f'<div class="hallazgo">'
+                    f'<div class="tema">{hallazgo["topic"]}</div>'
+                    f'<div class="titular">{hallazgo["headline"]}</div>'
+                    f'<div class="detalle">{hallazgo["detail"]}</div>'
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                if hallazgo["caveat"]:
+                    st.caption(f":orange[Ojo: {hallazgo['caveat']}]")
 
 
 def _que_hay_cargado() -> None:

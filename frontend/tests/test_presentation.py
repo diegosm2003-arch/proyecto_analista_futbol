@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from futbol_front import presentation
 from futbol_front.presentation import (
     prepare_pizza,
@@ -340,3 +342,23 @@ def test_con_poblacion_pequena_se_avisa_de_que_el_percentil_es_fragil() -> None:
     )
 
     assert "poblacion" in avisos[0].note
+
+
+# --- Etiqueta de temporada --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("codigo", "esperado"),
+    [("2627", "26/27"), ("2526", "25/26"), ("9900", "99/00")],
+)
+def test_la_temporada_se_ensena_como_se_dice(codigo: str, esperado: str) -> None:
+    # El codigo de cuatro digitos es lo que espera la fuente, pero nadie dice
+    # "la dos seis dos siete", y a primera vista parece un identificador interno.
+    assert presentation.season_label(codigo) == esperado
+
+
+@pytest.mark.parametrize("raro", ["", "2026-27", "actual"])
+def test_una_temporada_con_otro_formato_se_deja_como_esta(raro: str) -> None:
+    # Antes de inventarse un formato, se devuelve lo que hay: es preferible
+    # ensenar un codigo raro a ensenar uno bonito y equivocado.
+    assert presentation.season_label(raro) == raro

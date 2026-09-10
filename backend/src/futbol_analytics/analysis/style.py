@@ -42,6 +42,8 @@ DESCRIPTORS: dict[str, tuple[str, str]] = {
     "chance_prevention": ("concede poco", "concede mucho"),
     "finishing": ("finaliza por encima de lo esperado", "desperdicia ocasiones"),
     "chance_quality": ("cada llegada es peligrosa", "llega mucho y remata mal"),
+    "pressed": ("le presionan arriba", "le dejan salir jugando"),
+    "box_defence": ("aguanta el asedio", "se le mete todo el mundo en el area"),
 }
 
 
@@ -98,6 +100,18 @@ def build_features(teams: pd.DataFrame) -> pd.DataFrame:
     # distintos y hasta ahora salian en el mismo grupo.
     llegadas = pd.to_numeric(a_favor["deep_completions"], errors="coerce")
     features["chance_quality"] = xg / llegadas.where(llegadas > 0)
+
+    # Cuanto le presionan a el. Es un rasgo de estilo por derecho propio: hay
+    # equipos a los que todo el mundo va a buscar arriba y otros a los que se les
+    # deja salir y se les espera. Se invierte igual que la presion propia, para
+    # que "mas alto" siga significando "mas de eso".
+    features["pressed"] = -pd.to_numeric(en_contra["ppda"], errors="coerce")
+
+    # Llegadas del rival a su zona de remate, por partido. No es lo mismo que el
+    # peligro que concede: un bloque bajo puede permitir muchas entradas al area
+    # y defenderlas bien, y hasta ahora los dos casos caian en el mismo grupo.
+    concedidas = pd.to_numeric(en_contra["deep_completions"], errors="coerce")
+    features["box_defence"] = -(concedidas / partidos)
 
     return features
 

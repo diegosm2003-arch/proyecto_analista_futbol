@@ -8,12 +8,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from futbol_analytics.analysis import insights
 from futbol_analytics.analysis.roles import ARCHETYPES
 from futbol_analytics.api import services
 from futbol_analytics.api.dependencies import DataAccessDep
 from futbol_analytics.api.schemas import (
     Catalog,
     EtlRun,
+    Insight,
     MetricInfo,
     PizzaTemplate,
     RoleInfo,
@@ -21,7 +23,7 @@ from futbol_analytics.api.schemas import (
 )
 from futbol_analytics.config import get_settings
 from futbol_analytics.metrics import PLAYER_METRICS
-from futbol_analytics.templates import PIZZA_TEMPLATES
+from futbol_analytics.templates import OUTFIELD_TEMPLATE, PIZZA_TEMPLATES
 
 router = APIRouter(prefix="/meta", tags=["catalogo"])
 
@@ -120,3 +122,54 @@ def etl_runs(
     logs de un contenedor.
     """
     return [EtlRun(**fila) for fila in data.last_runs(limit)]
+
+
+@router.get("/insights", summary="Lo que dicen los datos cargados")
+def insights_endpoint(season: str, data: DataAccessDep) -> list[Insight]:
+    """Hallazgos de la temporada, cada uno con su matiz de lectura.
+
+    Es lo que da la bienvenida en lugar de un recuento de ligas cargadas. El
+    criterio de valor del proyecto no es tecnico: un analisis vale si se puede
+    resumir en una frase que a un aficionado avanzado le resulte interesante, y
+    una portada es justo donde eso tiene que demostrarse.
+
+    Los hallazgos que no se pueden calcular con lo que hay cargado se omiten en
+    lugar de devolverse vacios: media portada con huecos es peor que media
+    portada con tres frases buenas.
+    """
+    jugadores = services.enriched_players(data, season)
+    percentiles = services.player_percentiles(data, season)
+
+    # La edad vive en la ficha de Transfermarkt, no en `player_season`, asi que
+    # se pega aqui y no se arrastra en el frame que usa el resto de la API.
+    edades = data.ages(season)
+    if not jugadores.empty and "understat_id" in jugadores.columns:
+        jugadores = jugadores.assign(age=jugadores["understat_id"].map(edades))
+
+    familias: dict[str, list[str]] = {}
+    for slice_ in OUTFIELD_TEMPLATE:
+        familias.setdefault(slice_.category, []).append(slice_.metric)
+
+    hallazgos = [
+        insights.overperformer(jugadores),
+        insights.young_standout(
+            jugadores,
+            percentiles,
+            # Solo lo que mide aportacion: sin este filtro salia un chaval
+            # "destacado" en el percentil 94 de tarjetas amarillas.
+            metrics=[m.name for m in PLAYER_METRICS if m.higher_is_better is not None],
+        ),
+        insights.sharpest_contrast(percentiles, familias),
+        insights.territorial_team(data.teams(season)),
+    ]
+    return [
+        Insight(
+            topic=h.topic,
+            headline=h.headline,
+            subject=h.subject,
+            detail=h.detail,
+            caveat=h.caveat,
+        )
+        for h in hallazgos
+        if h is not None
+    ]

@@ -96,7 +96,7 @@ class Archetype:
     description: str
 
 
-# Cuatro perfiles ofensivos, los mismos para todas las posiciones de campo.
+# Doce perfiles ofensivos, los mismos para todas las posiciones de campo.
 #
 # Con las metricas de Understat no se pueden reconstruir los roles posicionales
 # del diseno original (central de area, lateral profundo, pivote...): eso exigia
@@ -106,31 +106,84 @@ class Archetype:
 # participa el jugador en el ataque de su equipo. Y como el clustering se hace
 # dentro de cada grupo de posicion, "constructor entre defensas" y "constructor
 # entre delanteros" son dos cosas muy distintas y ambas informativas.
+#
+# **La estructura no es libre.** Las tres cuotas —remate, creacion y
+# construccion— son compositivas: reparten la misma participacion, asi que suman
+# aproximadamente uno y no puede existir un perfil con las tres bajas. Los doce
+# salen por tanto de cruzar QUE cuota domina con COMO la ejecuta, que es lo que
+# miden las tres features libres: calidad de tiro, calidad de pase y acierto
+# frente a lo esperado.
+#
+# **Doce nombres finos no arreglan la limitacion de fondo.** Todas las features
+# son ofensivas, asi que a un central se le sigue clasificando por lo que hace
+# con balon. Los nombres afinan; el agujero defensivo sigue ahi y la interfaz lo
+# advierte.
 ATTACKING_ARCHETYPES: tuple[Archetype, ...] = (
+    # --- Domina el remate ---
     Archetype(
-        "Finalizador",
-        {"shot_share": 1.5, "shot_quality": 1.0, "buildup_share": -1.0, "creation_share": -0.5},
+        "Finalizador de area",
+        {"shot_share": 1.6, "shot_quality": 1.3, "buildup_share": -1.0, "creation_share": -0.6},
         "Casi toda su participacion acaba en un remate suyo, y desde buena posicion.",
     ),
     Archetype(
         "Tirador de volumen",
-        {"shot_share": 1.2, "shot_quality": -1.2, "buildup_share": -0.6},
+        {"shot_share": 1.3, "shot_quality": -1.4, "buildup_share": -0.7},
         "Remata mucho pero desde peores posiciones: dispara de lejos.",
     ),
     Archetype(
-        "Generador de ocasiones",
-        {"creation_share": 1.5, "pass_quality": 1.0, "shot_share": -0.8},
-        "Su aportacion es el ultimo pase, no el remate.",
+        "Rematador eficaz",
+        {"shot_share": 1.1, "finishing": 1.5, "shot_quality": 0.3, "buildup_share": -0.6},
+        "Marca por encima de lo que dicen sus ocasiones. Suele ser racha antes que virtud.",
     ),
     Archetype(
-        "Constructor",
-        {"buildup_share": 1.5, "shot_share": -1.2, "creation_share": -0.8},
+        "Rematador atascado",
+        {"shot_share": 1.1, "finishing": -1.5, "buildup_share": -0.6},
+        "Genera remates pero no los convierte. Tambien suele corregirse solo.",
+    ),
+    # --- Domina la creacion ---
+    Archetype(
+        "Generador de ocasiones claras",
+        {"creation_share": 1.6, "pass_quality": 1.3, "shot_share": -0.8},
+        "Su aportacion es el ultimo pase, y deja a companeros en buena posicion.",
+    ),
+    Archetype(
+        "Volumen de pase clave",
+        {"creation_share": 1.4, "pass_quality": -1.3, "shot_share": -0.6},
+        "Da muchos pases de ultimo tercio, pero la mayoria acaban en remates lejanos.",
+    ),
+    Archetype(
+        "Extremo asociativo",
+        {"creation_share": 1.0, "shot_share": 0.9, "buildup_share": -1.2},
+        "Reparte su aportacion entre rematar y asistir, casi nunca en la salida.",
+    ),
+    Archetype(
+        "Creador retrasado",
+        {"creation_share": 1.1, "buildup_share": 0.9, "shot_share": -1.4},
+        "Asiste desde lejos del area y participa antes en la jugada. No remata.",
+    ),
+    # --- Domina la construccion ---
+    Archetype(
+        "Constructor puro",
+        {"buildup_share": 1.7, "shot_share": -1.3, "creation_share": -1.0},
         "Participa en las jugadas que acaban en gol sin rematarlas ni asistirlas.",
+    ),
+    Archetype(
+        "Bisagra",
+        {"buildup_share": 1.2, "creation_share": 0.7, "shot_share": -1.2, "pass_quality": 0.4},
+        "Enlaza la salida con el ultimo tercio: construye y ademas da el pase previo.",
+    ),
+    Archetype(
+        "Constructor con llegada",
+        {"buildup_share": 1.2, "shot_share": 0.7, "creation_share": -1.0},
+        "Sale con el balon y ademas aparece a rematar. Un perfil de llegada desde atras.",
+    ),
+    Archetype(
+        "Primer pase",
+        {"buildup_share": 1.5, "pass_quality": -1.2, "shot_share": -1.0},
+        "Inicia muchas jugadas, pero lejos del area: su pase rara vez genera ocasion.",
     ),
 )
 
-# Los mismos cuatro para cada grupo de posicion: lo que cambia es contra quien
-# se compara, no que se mide.
 ARCHETYPES: dict[str, tuple[Archetype, ...]] = {
     "DF": ATTACKING_ARCHETYPES,
     "MF": ATTACKING_ARCHETYPES,

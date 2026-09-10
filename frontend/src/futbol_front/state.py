@@ -113,6 +113,10 @@ def cached_styles(season: str, league: str | None, n_styles: int) -> dict[str, A
     return _styles(data_version(), season, league, n_styles)
 
 
+def cached_insights(season: str) -> list[dict[str, Any]]:
+    return _insights(data_version(), season)
+
+
 def cached_teams(season: str, league: str | None) -> list[dict[str, Any]]:
     return _teams(data_version(), season, league)
 
@@ -197,3 +201,8 @@ def _teams(version: str, season: str, league: str | None) -> list[dict[str, Any]
 @st.cache_data(ttl=TTL_SECONDS)
 def _squad(version: str, team: str, season: str, league: str) -> list[dict[str, Any]]:
     return get_client().squad(team=team, season=season, league=league)
+
+
+@st.cache_data(ttl=TTL_SECONDS)
+def _insights(version: str, season: str) -> list[dict[str, Any]]:
+    return get_client().insights(season)

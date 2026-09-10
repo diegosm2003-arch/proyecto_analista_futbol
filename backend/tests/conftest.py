@@ -99,6 +99,10 @@ class FakeDataAccess:
     def squad_market(self, season: str, league: str, team: str) -> list[dict]:
         return []
 
+    def ages(self, season: str) -> dict[str, int]:
+        # Sin fichas de Transfermarkt cargadas, que es el estado por defecto.
+        return {}
+
 
 LIGAS = [
     "ESP-La Liga",

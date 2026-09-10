@@ -19,41 +19,113 @@ CADENA = 6.0
 
 # Perfiles expresados como el reparto de esa participacion. Las tres cuotas
 # suman uno: es lo que hace que describan al jugador y no cuanto juega.
+# Perfiles expresados como el reparto de esa participacion. Las tres cuotas
+# suman uno: es lo que hace que describan al jugador y no cuanto juega.
+#
+# Hay uno por arquetipo. Antes eran cuatro y los arquetipos pasaron a doce: con
+# menos perfiles que grupos, el clustering parte perfiles identicos en trozos
+# arbitrarios y los tests dejan de comprobar nada.
 PERFILES: dict[str, dict[str, float]] = {
-    # Remata casi todo lo que toca, y desde buena posicion.
-    "finalizador": {
+    # --- Domina el remate ---
+    "finalizador_area": {
         "remate": 0.70,
         "asistencia": 0.10,
         "construccion": 0.20,
-        "tiros": 40.0,
+        "tiros": 32.0,
         "pases_clave": 12.0,
-        "acierto": 1.10,
-    },
-    # Remata mucho pero de lejos: mismo volumen, peor calidad por tiro.
-    "tirador": {
-        "remate": 0.60,
-        "asistencia": 0.10,
-        "construccion": 0.30,
-        "tiros": 110.0,
-        "pases_clave": 14.0,
-        "acierto": 0.85,
-    },
-    # Su aportacion es el ultimo pase.
-    "creador": {
-        "remate": 0.15,
-        "asistencia": 0.55,
-        "construccion": 0.30,
-        "tiros": 25.0,
-        "pases_clave": 70.0,
         "acierto": 1.00,
     },
-    # Participa en las jugadas sin rematarlas ni asistirlas.
-    "constructor": {
-        "remate": 0.05,
+    # Mismo volumen de remate, peor calidad por tiro: dispara de lejos.
+    "tirador_volumen": {
+        "remate": 0.65,
         "asistencia": 0.10,
-        "construccion": 0.85,
+        "construccion": 0.25,
+        "tiros": 135.0,
+        "pases_clave": 14.0,
+        "acierto": 1.00,
+    },
+    # Estos dos solo se diferencian en el acierto, que es justo lo que se quiere
+    # comprobar: que el modelo separa marcar de generar.
+    "rematador_eficaz": {
+        "remate": 0.58,
+        "asistencia": 0.12,
+        "construccion": 0.30,
+        "tiros": 60.0,
+        "pases_clave": 14.0,
+        "acierto": 1.55,
+    },
+    "rematador_atascado": {
+        "remate": 0.58,
+        "asistencia": 0.12,
+        "construccion": 0.30,
+        "tiros": 60.0,
+        "pases_clave": 14.0,
+        "acierto": 0.50,
+    },
+    # --- Domina la creacion ---
+    "generador_claras": {
+        "remate": 0.12,
+        "asistencia": 0.58,
+        "construccion": 0.30,
+        "tiros": 20.0,
+        "pases_clave": 38.0,
+        "acierto": 1.00,
+    },
+    "volumen_pase": {
+        "remate": 0.12,
+        "asistencia": 0.55,
+        "construccion": 0.33,
+        "tiros": 20.0,
+        "pases_clave": 150.0,
+        "acierto": 1.00,
+    },
+    "extremo_asociativo": {
+        "remate": 0.42,
+        "asistencia": 0.40,
+        "construccion": 0.18,
+        "tiros": 62.0,
+        "pases_clave": 52.0,
+        "acierto": 1.00,
+    },
+    "creador_retrasado": {
+        "remate": 0.08,
+        "asistencia": 0.42,
+        "construccion": 0.50,
+        "tiros": 11.0,
+        "pases_clave": 46.0,
+        "acierto": 1.00,
+    },
+    # --- Domina la construccion ---
+    "constructor_puro": {
+        "remate": 0.05,
+        "asistencia": 0.08,
+        "construccion": 0.87,
         "tiros": 8.0,
-        "pases_clave": 10.0,
+        "pases_clave": 9.0,
+        "acierto": 1.00,
+    },
+    "bisagra": {
+        "remate": 0.08,
+        "asistencia": 0.27,
+        "construccion": 0.65,
+        "tiros": 11.0,
+        "pases_clave": 26.0,
+        "acierto": 1.00,
+    },
+    "constructor_llegada": {
+        "remate": 0.31,
+        "asistencia": 0.09,
+        "construccion": 0.60,
+        "tiros": 33.0,
+        "pases_clave": 11.0,
+        "acierto": 1.00,
+    },
+    "primer_pase": {
+        "remate": 0.07,
+        "asistencia": 0.13,
+        "construccion": 0.80,
+        "tiros": 10.0,
+        "pases_clave": 95.0,
         "acierto": 1.00,
     },
 }
@@ -154,11 +226,12 @@ def test_cada_perfil_sintetico_cae_en_un_unico_grupo() -> None:
 
 
 def test_el_constructor_se_reconoce() -> None:
-    # Es el perfil inequivoco: casi toda su participacion es previa al remate.
+    # Es el perfil inequivoco: casi toda su participacion es previa al remate, y
+    # ademas da pocos pases clave, que es lo que lo separa del "Primer pase".
     resultado = roles.assign_roles(_jugadores_sinteticos(), "MF")
 
-    constructores = resultado.assignments[resultado.assignments["perfil"] == "constructor"]
-    assert constructores["detailed_position"].iloc[0] == "Constructor"
+    constructores = resultado.assignments[resultado.assignments["perfil"] == "constructor_puro"]
+    assert constructores["detailed_position"].iloc[0] == "Constructor puro"
 
 
 def test_el_resultado_es_reproducible() -> None:

@@ -69,6 +69,9 @@ class DataAccess(Protocol):
     def squad_market(self, season: str, league: str, team: str) -> list[dict]:
         """Edad y ultimo valor de mercado de cada jugador de un equipo."""
 
+    def ages(self, season: str) -> dict[str, int]:
+        """Edad de cada jugador con ficha, por `understat_id`."""
+
 
 class SqlDataAccess:
     """Implementacion sobre PostgreSQL."""
@@ -200,6 +203,13 @@ class SqlDataAccess:
         )
         with self._engine.connect() as conexion:
             return [dict(fila) for fila in conexion.execute(consulta).mappings()]
+
+    def ages(self, season: str) -> dict[str, int]:
+        consulta = select(player_profile.c.understat_id, player_profile.c.age).where(
+            player_profile.c.age.is_not(None)
+        )
+        with self._engine.connect() as conexion:
+            return {fila[0]: int(fila[1]) for fila in conexion.execute(consulta)}
 
     def _read(self, consulta) -> pd.DataFrame:
         with self._engine.connect() as conexion:

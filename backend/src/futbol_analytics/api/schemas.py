@@ -159,6 +159,16 @@ class PlayerProfile(BaseModel):
     metrics: list[MetricPercentile]
 
 
+class Insight(BaseModel):
+    """Un hallazgo de la temporada cargada, con su lectura."""
+
+    topic: str = Field(description="Que pregunta responde")
+    headline: str = Field(description="La frase, legible sola")
+    subject: str
+    detail: str
+    caveat: str = Field(default="", description="Como hay que leerlo")
+
+
 class PlayerCard(BaseModel):
     """Ficha de Transfermarkt: el contexto que un percentil no da."""
 

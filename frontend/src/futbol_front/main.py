@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from futbol_front import branding
 from futbol_front.client import ApiError
 from futbol_front.state import cached_health
 from futbol_front.views import home, players, teams
@@ -32,20 +33,33 @@ VISTAS = {
 
 
 def _cabecera(destino: str) -> None:
-    """Barra superior: marca, cambio de ambito y vuelta a la portada.
+    """Barra superior: marca clicable y cambio de ambito.
 
     Va arriba y no en la barra lateral porque es donde el usuario ya esta
     mirando: los filtros de la vista vienen justo debajo, y tener navegacion y
     filtros juntos evita el salto de vista a un lateral que el resto del tiempo
     esta vacio.
-    """
-    marca, ambito, ayuda = st.columns([4, 3, 1], vertical_alignment="center")
 
-    with marca:
+    **La vuelta a inicio es el logotipo**, arriba a la izquierda, que es donde
+    todo el mundo la busca desde que existen los sitios web. Antes era un boton
+    suelto a la derecha, en el sitio donde suelen estar las acciones destructivas
+    y la configuracion.
+    """
+    logo, marca, ambito, _ = st.columns([1, 5, 4, 2], vertical_alignment="center")
+
+    with logo:
         st.markdown(
-            '<div style="font-weight:800;font-size:1.3rem;letter-spacing:-.02em;">'
-            'Futbol <span style="color:var(--acento);">Analytics</span></div>',
+            f'<div class="marca-logo">{branding.logo_html()}</div>',
             unsafe_allow_html=True,
+        )
+    with marca:
+        # Boton sin borde: tiene que leerse como la marca, no como un control.
+        st.button(
+            "Futbol Analytics",
+            type="tertiary",
+            help="Volver a la portada",
+            on_click=home.ir_a,
+            args=(None,),
         )
 
     with ambito:
@@ -61,9 +75,6 @@ def _cabecera(destino: str) -> None:
         if elegido and elegido != VISTAS[destino][0]:
             home.ir_a(claves[etiquetas.index(elegido)])
             st.rerun()
-
-    with ayuda:
-        st.button("Inicio", width="stretch", on_click=home.ir_a, args=(None,))
 
 
 def _estado_de_los_datos() -> None:

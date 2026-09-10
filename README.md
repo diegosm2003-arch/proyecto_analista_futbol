@@ -485,6 +485,25 @@ dejarlo sin invertir situaria a los equipos mas agresivos abajo.
 **Como leerlo.** Que es un percentil, por que la poblacion son las Big 5 y las
 tres advertencias que mas se malinterpretan.
 
+### Lo que da la bienvenida
+
+La portada no enumera cuantas ligas hay cargadas: eso son metadatos de
+instalacion. Ensena **hallazgos** del dato de la temporada, cada uno con como hay
+que leerlo. Responde al criterio de valor del proyecto, que no es tecnico: un
+analisis vale si se puede resumir en una frase que a un aficionado avanzado le
+resulte interesante, y una portada es donde eso tiene que demostrarse antes que
+en ningun otro sitio.
+
+El matiz no es adorno. Casi todos los extremos de una temporada empezada son
+ruido, y presentarlos sin decirlo convierte una herramienta de analisis en una
+maquina de titulares.
+
+> **Sobre las ligas marcadas como proximamente:** Understat, que es la fuente de
+> las estadisticas, publica las cinco grandes y la liga rusa, y nada mas. La
+> primera de esa tira es por tanto la unica alcanzable con lo que hay hoy; las
+> otras necesitan una fuente que el proyecto todavia no tiene, asi que son una
+> intencion de producto y no una fecha.
+
 ### Como esta organizada
 
 Se navega en tres pasos —**liga, equipo y jugador**— y no con un buscador de
@@ -657,6 +676,11 @@ perfil:
 - **No hay una sola metrica defensiva.** Understat no publica entradas,
   intercepciones ni despejes, asi que a un central solo se le juzga con balon.
   Es la limitacion mas seria que arrastra el proyecto.
+- **Los doce roles son todos ofensivos.** El clustering nombra perfiles finos
+  —"Bisagra", "Primer pase", "Finalizador de area"— pero las seis
+  caracteristicas que los definen salen todas del juego con balon. A un central
+  se le sigue clasificando por como participa en el ataque, no por como
+  defiende. Los nombres afinan; el agujero de fondo sigue ahi.
 - **La posicion concreta esta cargada pero aun no se usa para comparar.**
   Transfermarkt da "Centre-Back", "Left Winger" o "Central Midfield" donde
   Understat solo da `DF`, y eso se guarda ya en `player_profile`. Falta el paso

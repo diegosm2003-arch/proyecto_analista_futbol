@@ -19,7 +19,7 @@ from typing import Any
 
 import streamlit as st
 
-from futbol_front.theme import LEAGUE_LOGOS, Palette
+from futbol_front.theme import LEAGUE_LOGOS, UPCOMING_LEAGUES, Palette
 
 LIGA = "liga_elegida"
 EQUIPO = "equipo_elegido"
@@ -89,7 +89,10 @@ def selector_de_liga(leagues: list[str], titulo: str) -> None:
     columnas = st.columns(min(len(leagues), POR_FILA), gap="medium")
     for columna, liga in zip(columnas, leagues, strict=False):
         with columna, st.container(border=True):
-            st.markdown(_ficha(LEAGUE_LOGOS.get(liga), liga, ""), unsafe_allow_html=True)
+            st.markdown(
+                _ficha(LEAGUE_LOGOS.get(liga), _nombre_corto(liga), ""),
+                unsafe_allow_html=True,
+            )
             st.button(
                 "Entrar",
                 key=f"liga-{liga}",
@@ -97,6 +100,40 @@ def selector_de_liga(leagues: list[str], titulo: str) -> None:
                 on_click=elegir_liga,
                 args=(liga,),
             )
+
+    _proximas()
+
+
+def _proximas() -> None:
+    """Ligas que aun no estan cargadas.
+
+    Se ensenan porque una rejilla con cinco fichas y nada mas no dice si eso es
+    todo lo que va a haber. Van atenuadas y sin boton para que se lean como un
+    anuncio y no como algo en lo que se pueda entrar y falle.
+    """
+    st.divider()
+    st.caption("Proximamente")
+
+    columnas = st.columns(len(UPCOMING_LEAGUES), gap="medium")
+    for columna, (nombre, logo) in zip(columnas, UPCOMING_LEAGUES, strict=False):
+        with columna:
+            st.markdown(
+                f'<div class="ficha-proxima">'
+                f'<img src="{logo}" alt="{nombre}" loading="lazy">'
+                f'<div class="nombre">{nombre}</div>'
+                f'<div class="etiqueta">Proximamente</div></div>',
+                unsafe_allow_html=True,
+            )
+
+
+def _nombre_corto(liga: str) -> str:
+    """Nombre de liga sin el prefijo de pais.
+
+    El catalogo las identifica como "ESP-La Liga" porque es lo que espera la
+    fuente, pero debajo de su propio escudo el prefijo sobra y ademas corta el
+    nombre en dos lineas.
+    """
+    return liga.split("-", 1)[-1] if "-" in liga else liga
 
 
 def selector_de_equipo(equipos: list[dict[str, Any]], titulo: str) -> None:

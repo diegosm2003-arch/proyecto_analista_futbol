@@ -305,6 +305,24 @@ def _nota(metrica: dict[str, Any], poblacion_fragil: bool) -> str:
     return "; ".join(notas)
 
 
+def season_label(season: str) -> str:
+    """Temporada en el formato con el que se habla de ella.
+
+    `soccerdata` la codifica con cuatro digitos ("2627") porque es lo que espera
+    la fuente, pero nadie dice "la dos seis dos siete": se dice 26/27. La barra
+    ademas evita el otro problema del codigo crudo, que a primera vista parece un
+    ano suelto o un identificador interno.
+
+    >>> season_label("2627")
+    '26/27'
+    >>> season_label("raro")
+    'raro'
+    """
+    if len(season) == 4 and season.isdigit():
+        return f"{season[:2]}/{season[2:]}"
+    return season
+
+
 def chart_filename(*partes: str, extension: str = "png") -> str:
     """Nombre de fichero para un grafico descargado.
 

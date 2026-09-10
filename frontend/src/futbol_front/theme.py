@@ -79,6 +79,24 @@ LEAGUE_LOGOS: dict[str, str] = {
 }
 
 
+# Competiciones que aun no estan cargadas. Se ensenan atenuadas porque una
+# rejilla con cinco fichas y nada mas no dice si eso es todo lo que habra.
+#
+# **La primera es la unica alcanzable hoy**: Understat, que es la fuente de las
+# estadisticas, publica las cinco grandes y la liga rusa, y nada mas. Las otras
+# necesitan una fuente que el proyecto todavia no tiene, asi que son una
+# intencion y no una fecha. Esta escrito tambien en el README para que no se lea
+# como una promesa.
+UPCOMING_LEAGUES: tuple[tuple[str, str], ...] = (
+    ("Premier rusa", "https://tmssl.akamaized.net/images/logo/header/ru1.png"),
+    ("Primeira Liga", "https://tmssl.akamaized.net/images/logo/header/po1.png"),
+    ("Eredivisie", "https://tmssl.akamaized.net/images/logo/header/nl1.png"),
+    ("Championship", "https://tmssl.akamaized.net/images/logo/header/gb2.png"),
+    ("Jupiler Pro League", "https://tmssl.akamaized.net/images/logo/header/be1.png"),
+    ("Superliga turca", "https://tmssl.akamaized.net/images/logo/header/tr1.png"),
+)
+
+
 def palette(league: str | None) -> Palette:
     """Paleta de una liga. La de por defecto cuando se miran todas a la vez."""
     if league is None:
@@ -148,6 +166,12 @@ div[data-baseweb="tab-highlight"] {{ background-color: {p.accent}; }}
 }}
 .stButton button:hover {{ border-color: {p.accent}; }}
 
+/* Logotipo: toma el acento de la liga a traves de currentColor. */
+.logotipo {{ color: {p.accent}; display: inline-flex; }}
+.logotipo svg, .logotipo img {{ width: 100%; height: 100%; }}
+.marca-logo {{ display: flex; align-items: center; justify-content: flex-start; }}
+.marca-portada {{ margin-bottom: .4rem; }}
+
 /* Cinta con el nombre de la liga. */
 .cinta-liga {{
     display: inline-flex; align-items: center; gap: .5rem;
@@ -180,18 +204,46 @@ div[data-baseweb="tab-highlight"] {{ background-color: {p.accent}; }}
 .ficha-escudo {{
     text-align: center; padding: .4rem 0 .2rem 0;
 }}
-.ficha-escudo img {{ height: 44px; width: auto; object-fit: contain; }}
+.ficha-escudo img {{ height: 72px; width: auto; object-fit: contain; }}
 .ficha-escudo .sin-escudo {{
     display: inline-flex; align-items: center; justify-content: center;
-    width: 44px; height: 44px; border-radius: 10px;
+    width: 72px; height: 72px; border-radius: 14px;
     background: {p.accent_soft}; color: {p.accent};
-    font-weight: 800; font-size: 1.05rem;
+    font-weight: 800; font-size: 1.5rem;
 }}
 .ficha-escudo .nombre {{
-    margin-top: .45rem; font-size: .86rem; font-weight: 600;
+    margin-top: .55rem; font-size: .92rem; font-weight: 600;
     color: {TEXT}; line-height: 1.25;
 }}
-.ficha-escudo .dato {{ color: {TEXT_MUTED}; font-size: .75rem; }}
+.ficha-escudo .dato {{ color: {TEXT_MUTED}; font-size: .78rem; }}
+
+/* Liga que aun no esta cargada: en sombra, para que se lea como un anuncio y
+   no como algo en lo que se pueda entrar. */
+.ficha-proxima {{ text-align: center; padding: .5rem 0 .3rem 0; opacity: .38; }}
+.ficha-proxima img {{
+    height: 56px; width: auto; object-fit: contain;
+    filter: grayscale(1) brightness(1.6);
+}}
+.ficha-proxima .nombre {{
+    margin-top: .5rem; font-size: .84rem; font-weight: 600; color: {TEXT};
+}}
+.ficha-proxima .etiqueta {{
+    margin-top: .2rem; font-size: .68rem; text-transform: uppercase;
+    letter-spacing: .08em; color: {TEXT_MUTED};
+}}
+
+/* Hallazgo de la portada. */
+.hallazgo {{ padding: .3rem .1rem; }}
+.hallazgo .tema {{
+    color: {p.accent}; font-size: .68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .09em; margin-bottom: .4rem;
+}}
+.hallazgo .titular {{
+    color: {TEXT}; font-size: 1.02rem; font-weight: 600; line-height: 1.4;
+}}
+.hallazgo .detalle {{
+    color: {TEXT_MUTED}; font-size: .85rem; margin-top: .35rem; line-height: 1.45;
+}}
 
 /* Panel de lectura que acompana a un grafico. */
 .panel-detalle {{
