@@ -344,3 +344,29 @@ def chart_filename(*partes: str, extension: str = "png") -> str:
 def _slug(texto: str) -> str:
     sin_acentos = unicodedata.normalize("NFKD", str(texto)).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]+", "-", sin_acentos.lower()).strip("-")
+
+
+def prepare_slope(
+    profile_before: dict[str, Any],
+    profile_after: dict[str, Any],
+    template: list[dict[str, Any]],
+) -> tuple[list[str], list[int], list[int]]:
+    """Métricas con percentil en LAS DOS temporadas, en el orden de la plantilla.
+
+    Solo entran las que existen en ambas: dibujar un cambio contra un hueco
+    afirmaría una mejora o un empeoramiento que no se puede sostener.
+    """
+    antes = {m["metric"]: m for m in profile_before.get("metrics", [])}
+    despues = {m["metric"]: m for m in profile_after.get("metrics", [])}
+
+    etiquetas, valores_antes, valores_despues = [], [], []
+    for slice_ in template:
+        metrica = slice_["metric"]
+        a, b = antes.get(metrica), despues.get(metrica)
+        if not a or not b or a.get("percentile") is None or b.get("percentile") is None:
+            continue
+        etiquetas.append(a.get("label", metrica))
+        valores_antes.append(_percentil(a["percentile"], metrica))
+        valores_despues.append(_percentil(b["percentile"], metrica))
+
+    return etiquetas, valores_antes, valores_despues

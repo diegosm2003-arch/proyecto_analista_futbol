@@ -37,14 +37,35 @@ from futbol_front.theme import DEFAULT, Palette
 # de goles y asistencias confunde en una sola.
 FINISHING, CREATION, BUILDUP = "Finalización", "Creación", "Construcción"
 
+# Paleta de Okabe-Ito, disenada para distinguirse con cualquier tipo de
+# daltonismo. Sustituye a una eleccion "a ojo" que mezclaba rojo y verde, que es
+# justo el par que una de cada doce personas no separa.
+#
+# El color nunca es el unico canal: las porciones del pizza llevan ademas su
+# etiqueta, y los grupos del mapa de estilos, su marcador.
+OKABE_ITO = (
+    "#E69F00",  # naranja
+    "#56B4E9",  # azul cielo
+    "#009E73",  # verde azulado
+    "#F0E442",  # amarillo
+    "#0072B2",  # azul
+    "#D55E00",  # bermellon
+    "#CC79A7",  # rosa
+    "#999999",  # gris
+)
+
 # Un color por categoria, constante entre ligas. Se distinguen bien en pantalla
 # y tambien impresos en gris, que importa si el grafico acaba en un post.
 CATEGORY_COLORS = {
-    FINISHING: "#FF5C7A",
-    CREATION: "#4C8DFF",
-    BUILDUP: "#3ED598",
+    FINISHING: OKABE_ITO[5],
+    CREATION: OKABE_ITO[1],
+    BUILDUP: OKABE_ITO[2],
 }
-UNKNOWN_CATEGORY = "#8A93A6"
+UNKNOWN_CATEGORY = OKABE_ITO[7]
+
+# Marcadores para los grupos del mapa de estilos. Con doce o dieciseis grupos no
+# hay paleta que aguante, asi que la forma hace de segundo canal.
+CLUSTER_MARKERS = ("o", "s", "^", "D", "v", "P", "X", "*")
 
 # Fondo y tinta de los graficos. Coinciden con el tema oscuro de la interfaz.
 BACKGROUND = "#161D2B"
@@ -55,7 +76,7 @@ GRID = "#2A344A"
 # Tamanos. El pizza cabe junto a su panel de detalle sin obligar a bajar.
 PIZZA_SIZE = (5.4, 5.8)
 COMPARE_SIZE = (6.0, 6.4)
-MAP_SIZE = (7.2, 4.8)
+MAP_SIZE = (7.2, 5.6)
 SMALL_SIZE = (5.2, 3.2)
 
 
@@ -300,7 +321,6 @@ def style_map(data: StyleMapData, title: str, palette: Palette = DEFAULT) -> Fig
         raise ValueError("No hay equipos con posesión y presión conocidas.")
 
     figura, ejes = _lienzo(MAP_SIZE)
-    colores = plt.get_cmap("Set2")
 
     for cluster in sorted(set(data.clusters)):
         indices = [i for i, valor in enumerate(data.clusters) if valor == cluster]
@@ -308,7 +328,10 @@ def style_map(data: StyleMapData, title: str, palette: Palette = DEFAULT) -> Fig
             [data.territory[i] for i in indices],
             [data.ppda[i] for i in indices],
             s=90,
-            color=colores(cluster % 8),
+            color=OKABE_ITO[cluster % len(OKABE_ITO)],
+            # La forma es un segundo canal: con muchos grupos el color solo no
+            # llega, y ademas hay quien no distingue algunos pares.
+            marker=CLUSTER_MARKERS[cluster % len(CLUSTER_MARKERS)],
             edgecolor=BACKGROUND,
             linewidth=1.2,
             label=data.styles[indices[0]],
@@ -331,10 +354,17 @@ def style_map(data: StyleMapData, title: str, palette: Palette = DEFAULT) -> Fig
     ejes.set_title(title, color=TEXT, weight="bold", fontsize=12)
     ejes.grid(color=GRID, linewidth=0.7, zorder=1)
     ejes.tick_params(colors=TEXT_MUTED, labelsize=8)
-    leyenda = ejes.legend(loc="best", fontsize=7, frameon=True, facecolor=BACKGROUND)
+    # La leyenda va FUERA del area de dibujo. Dentro tapaba puntos del propio
+    # scatter, que en un mapa de dispersion es perder dato para explicar el dato.
+    leyenda = ejes.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=2,
+        fontsize=7,
+        frameon=False,
+    )
     for texto in leyenda.get_texts():
         texto.set_color(TEXT)
-    leyenda.get_frame().set_edgecolor(GRID)
     figura.tight_layout()
     return figura
 
@@ -419,14 +449,28 @@ def compare(
     return figura
 
 
-def to_png(figura: Figure, dpi: int = 200) -> bytes:
-    """Convierte una figura en un PNG listo para descargar.
+# Pie que se incrusta en cada PNG exportado. Sin esto, un grafico que circula
+# por redes pierde de donde sale: quien lo ve no sabe ni quien lo hizo ni con que
+# datos, y eso vale tanto para la atribucion como para que el dato se lea bien.
+BRAND = "Fútbol Analytics"
+DATA_SOURCE = "Datos: Understat · Transfermarkt"
 
-    Se fija el color de fondo explicitamente porque `savefig` usa blanco por
-    defecto y perderia el fondo del grafico, dejando un marco blanco alrededor
-    del circulo. A 200 ppp la imagen aguanta bien en una publicacion sin pesar
-    de mas.
+
+def to_png(figura: Figure, dpi: int = 200, brand: bool = True) -> bytes:
+    """Convierte una figura en un PNG listo para publicar.
+
+    Se fija el color de fondo explícitamente porque `savefig` usa blanco por
+    defecto y perdería el fondo del gráfico, dejando un marco blanco alrededor
+    del círculo. A 200 ppp la imagen aguanta bien en una publicación sin pesar
+    de más.
+
+    La marca y la fuente van incrustadas en la imagen, no como texto aparte: un
+    gráfico se comparte solo, sin el mensaje que lo acompañaba, y sin el pie
+    nadie sabe de dónde sale ni con qué datos está hecho.
     """
+    if brand:
+        _firmar(figura)
+
     buffer = io.BytesIO()
     figura.savefig(
         buffer,
@@ -436,6 +480,20 @@ def to_png(figura: Figure, dpi: int = 200) -> bytes:
         facecolor=figura.get_facecolor(),
     )
     return buffer.getvalue()
+
+
+def _firmar(figura: Figure) -> None:
+    """Pone la marca y la fuente en el pie de la figura.
+
+    Se comprueba antes de escribir para no firmar dos veces: la misma figura se
+    puede exportar varias veces si el usuario pulsa descargar más de una vez.
+    """
+    if getattr(figura, "_firmada", False):
+        return
+
+    figura.text(0.01, 0.008, BRAND, size=7, ha="left", color=TEXT_MUTED, weight="bold")
+    figura.text(0.99, 0.008, DATA_SOURCE, size=6.5, ha="right", color=TEXT_MUTED)
+    figura._firmada = True
 
 
 def _lienzo(size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
@@ -656,5 +714,65 @@ def cumulative_goals(
     leyenda = ejes.legend(loc="upper left", fontsize=7.5, frameon=False)
     for texto in leyenda.get_texts():
         texto.set_color(TEXT_MUTED)
+    figura.tight_layout()
+    return figura
+
+
+def slope_chart(
+    labels: list[str],
+    before: list[int],
+    after: list[int],
+    season_before: str,
+    season_after: str,
+    palette: Palette = DEFAULT,
+) -> Figure:
+    """Cambio de percentil entre dos temporadas.
+
+    **Es un slope chart y no un gráfico de líneas a propósito.** Con dos
+    temporadas hay dos puntos, y dos puntos no son una tendencia: una línea que
+    los une sugiere una trayectoria que no está en los datos. Un slope
+    representa lo que de verdad hay, que es un cambio entre dos observaciones.
+
+    El color de cada línea dice la dirección —sube o baja— y el grosor, cuánto:
+    así los cambios grandes destacan sin tener que leer los números.
+    """
+    if not labels:
+        raise ValueError("No hay métricas comparables entre las dos temporadas.")
+
+    alto = max(3.2, 0.34 * len(labels) + 1.4)
+    figura, ejes = _lienzo((5.4, alto))
+
+    for etiqueta, antes, despues in zip(labels, before, after, strict=True):
+        cambio = despues - antes
+        color = palette.accent if cambio >= 0 else CATEGORY_COLORS[FINISHING]
+        ejes.plot(
+            [0, 1],
+            [antes, despues],
+            color=color,
+            linewidth=max(1.0, min(3.2, abs(cambio) / 12)),
+            marker="o",
+            markersize=4,
+            alpha=0.9,
+            zorder=3,
+        )
+        ejes.text(
+            -0.04,
+            antes,
+            f"{etiqueta}  {antes}",
+            ha="right",
+            va="center",
+            fontsize=7,
+            color=TEXT_MUTED,
+        )
+        ejes.text(1.04, despues, f"{despues}", ha="left", va="center", fontsize=7, color=TEXT)
+
+    ejes.set_xlim(-0.75, 1.3)
+    ejes.set_ylim(-5, 105)
+    ejes.set_xticks([0, 1], [season_before, season_after], color=TEXT, fontsize=9)
+    ejes.set_ylabel("Percentil", color=TEXT_MUTED, fontsize=8)
+    ejes.tick_params(axis="y", colors=TEXT_MUTED, labelsize=7)
+    ejes.grid(axis="y", color=GRID, linewidth=0.6, alpha=0.5, zorder=1)
+    for lado in ("top", "right", "bottom"):
+        ejes.spines[lado].set_visible(False)
     figura.tight_layout()
     return figura

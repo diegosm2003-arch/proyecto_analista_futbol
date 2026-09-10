@@ -22,6 +22,7 @@ import streamlit as st
 
 from futbol_front import charts, presentation
 from futbol_front.client import ApiError
+from futbol_front.presentation import season_label
 from futbol_front.state import (
     cached_catalog,
     cached_form,
@@ -154,6 +155,7 @@ def render() -> None:
         _tiros(perfil["player"], paleta)
     with forma:
         _forma(perfil["player"], paleta)
+        _evolucion(perfil, catalogo, base, poblacion, plantillas, paleta)
     with mercado:
         _mercado(perfil["player"])
     with plantel:
@@ -728,6 +730,84 @@ def _forma(ficha: dict, paleta: Palette) -> None:
             ],
             hide_index=True,
             width="stretch",
+        )
+
+
+def _evolucion(
+    perfil: dict,
+    catalogo: dict,
+    base: str,
+    poblacion: str,
+    plantillas: list[dict],
+    paleta: Palette,
+) -> None:
+    """Cómo ha cambiado su percentil respecto a la temporada anterior.
+
+    **Es un slope y no una línea de evolución.** Con dos temporadas hay dos
+    puntos, y dos puntos no son una tendencia: una línea que los une sugiere una
+    trayectoria que no está en los datos. Un slope representa lo que de verdad
+    hay, un cambio entre dos observaciones.
+    """
+    ficha = perfil["player"]
+    temporadas = catalogo["seasons"]
+    actual = ficha["season"]
+    anteriores = [t for t in temporadas if t < actual]
+    if not anteriores:
+        return
+
+    previa = anteriores[-1]
+    st.divider()
+    st.subheader(f"Cambio respecto a {season_label(previa)}")
+
+    try:
+        perfil_previo = cached_profile(
+            player=ficha["player"],
+            season=previa,
+            team=None,
+            basis=base,
+            population=poblacion,
+        )
+    except ApiError:
+        # No estar la temporada pasada es lo normal en un recien llegado o un
+        # canterano; no es un error que merezca ensuciar la pantalla.
+        st.caption(
+            f"No hay perfil de {season_label(previa)} para este jugador: puede no haber "
+            "estado en las Big 5 o no haber superado el umbral de minutos."
+        )
+        return
+
+    plantilla = _plantilla(plantillas, ficha["position_group"])
+    etiquetas, antes, despues = presentation.prepare_slope(perfil_previo, perfil, plantilla)
+    if not etiquetas:
+        st.caption("No comparten métricas con percentil en las dos temporadas.")
+        return
+
+    grafico, panel = st.columns([2, 3], gap="large")
+    with grafico:
+        figura = charts.slope_chart(
+            etiquetas, antes, despues, season_label(previa), season_label(actual), paleta
+        )
+        st.pyplot(figura, width="content")
+
+    with panel:
+        cambios = sorted(
+            zip(etiquetas, antes, despues, strict=True),
+            key=lambda x: abs(x[2] - x[1]),
+            reverse=True,
+        )
+        etiqueta, a, b = cambios[0]
+        st.markdown(
+            '<div class="panel-detalle">'
+            '<div class="titulo">Donde mas ha cambiado</div>'
+            f'<div class="valor">{etiqueta}: del percentil {a} al {b} '
+            f"({b - a:+d}).</div></div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            f":orange[{season_label(actual)} está empezada, así que se compara una "
+            "temporada completa con una parcial. Los dos valores son percentiles por 90 "
+            "minutos, pero con pocos partidos un cambio de esta magnitud entra dentro de "
+            "lo esperable por azar.]"
         )
 
 
