@@ -1,20 +1,11 @@
-<!--
-  Logotipo provisional. Sustituyelo por el definitivo manteniendo el nombre del
-  fichero y la interfaz lo coge sola, sin tocar codigo.
-
-  Dos condiciones para que encaje con el tema:
-  - Un lienzo cuadrado (viewBox 0 0 48 48), porque el hueco de la cabecera lo es.
-  - `currentColor` en los trazos que deban tomar el color de la liga. Lo que
-    lleve un color fijo se quedara igual en las cinco competiciones.
--->
 <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" fill="none"
      stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
      stroke-linejoin="round" role="img" aria-label="Futbol Analytics">
   <circle cx="24" cy="24" r="20" opacity="0.35"/>
   <path d="M4 24h40" opacity="0.35"/>
   <circle cx="24" cy="24" r="7.5" opacity="0.35"/>
-  <path d="M12 34V22" />
-  <path d="M20 34V15" />
-  <path d="M28 34v-8" />
-  <path d="M36 34V19" />
+  <path d="M12 34V22"/>
+  <path d="M20 34V15"/>
+  <path d="M28 34v-8"/>
+  <path d="M36 34V19"/>
 </svg>
