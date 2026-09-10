@@ -557,6 +557,43 @@ decimal y las coordenadas exactas del punto de penalti, y ninguna otra jugada
 reproduce eso. Sin la etiqueta, el npxG calculado desde los tiros los incluiria
 en silencio, y "sin penaltis" es justo lo que distingue a esa metrica.
 
+### Que le rematan a un equipo
+
+Es lo mas cerca que se puede estar de medir defensa con esta fuente. Understat no
+publica entradas ni intercepciones, asi que no se puede medir la accion
+defensiva; si se puede medir su resultado: cuantos remates permite un equipo,
+desde donde y de que calidad.
+
+La distincion que esto permite y el total de goles encajados esconde: un bloque
+bajo que concede muchos disparos lejanos y un bloque alto que concede pocos pero
+claros son estilos opuestos que pueden acabar la jornada con los mismos goles en
+contra.
+
+Los tiros concedidos **se derivan y no se guardan**: los partidos de un equipo
+son aquellos en los que ha rematado, y lo concedido son los tiros del resto de
+equipos en esos mismos partidos. Una columna de rival seria un dato duplicado
+que puede quedar desalineado.
+
+### Comparar dos jugadores
+
+Dos formas, porque responden a preguntas distintas. El **radar** dice como es
+cada uno; las **barras enfrentadas** dicen donde esta la diferencia, ordenadas
+por cuanto se separan. Con ocho o mas metricas el radar comparado se satura, y es
+justo cuando las barras se leen mejor.
+
+El panel de al lado escribe la respuesta que ninguno de los dos graficos da
+escrita: en que metrica se separan mas y cuanto.
+
+### Cada analisis, un enlace
+
+El estado de la vista —ambito, liga, equipo y temporada— viaja en la URL, asi
+que copiarla comparte exactamente lo que se esta viendo. Es lo que convierte un
+hallazgo en algo publicable sin tener que explicar la ruta con palabras.
+
+Solo viaja lo que identifica la vista, no todo el estado: que un desplegable
+este abierto no define lo que se esta mirando, y meterlo todo haria la URL
+ilegible y fragil.
+
 ### Jugadores similares
 
 Debajo del perfil, quien mas juega asi dentro de su mismo grupo posicional. Es

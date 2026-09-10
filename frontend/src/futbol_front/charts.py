@@ -452,6 +452,7 @@ def shot_map(
     shots: list[dict],
     title: str,
     palette: Palette = DEFAULT,
+    conceded: bool = False,
 ) -> Figure:
     """Mapa de tiros sobre medio campo.
 
@@ -466,6 +467,10 @@ def shot_map(
 
     Se dibuja medio campo porque prácticamente ningún tiro sale de la mitad
     propia, y con el campo entero los remates se apelmazan en un rincón.
+
+    Con `conceded` cambian las etiquetas y el color del gol: un gol no significa
+    lo mismo cuando se remata que cuando se recibe, y pintar de color de marca un
+    gol encajado se leería como un logro.
     """
     if not shots:
         raise ValueError("Este jugador no tiene tiros cargados.")
@@ -480,6 +485,10 @@ def shot_map(
     )
     figura, ejes = campo.draw(figsize=(4.6, 4.4))
     figura.patch.set_facecolor(BACKGROUND)
+
+    color_gol = CATEGORY_COLORS[FINISHING] if conceded else palette.accent
+    etiqueta_gol = "Gol encajado" if conceded else "Gol"
+    etiqueta_resto = "Remate parado o fallado" if conceded else "Sin gol"
 
     # Understat normaliza a 0-1 y `opta` espera 0-100.
     x = [(s["location_x"] or 0) * 100 for s in shots]
@@ -497,19 +506,19 @@ def shot_map(
         edgecolor=BACKGROUND,
         linewidth=0.6,
         zorder=2,
-        label="Sin gol",
+        label=etiqueta_resto,
     )
     campo.scatter(
         [v for v, g in zip(x, goles, strict=True) if g],
         [v for v, g in zip(y, goles, strict=True) if g],
         s=[v for v, g in zip(tamanos, goles, strict=True) if g],
         ax=ejes,
-        color=palette.accent,
+        color=color_gol,
         alpha=0.95,
         edgecolor=TEXT,
         linewidth=0.8,
         zorder=3,
-        label="Gol",
+        label=etiqueta_gol,
     )
 
     figura.text(0.5, 0.965, title, size=11, ha="center", color=TEXT, weight="bold")
@@ -524,4 +533,67 @@ def shot_map(
     leyenda = ejes.legend(loc="lower center", fontsize=7, frameon=False, ncol=2)
     for texto in leyenda.get_texts():
         texto.set_color(TEXT_MUTED)
+    return figura
+
+
+def mirror_bars(
+    data: ComparisonData,
+    name_a: str,
+    name_b: str,
+    palette: Palette = DEFAULT,
+) -> Figure:
+    """Dos jugadores en barras enfrentadas, ordenadas por diferencia.
+
+    Complementa al pizza comparado y responde a otra pregunta. El pizza dice
+    cómo es cada uno; esto dice **dónde está la diferencia**, que es lo que un
+    scout quiere saber cuando ya sabe que los dos le valen.
+
+    El orden lo manda la diferencia absoluta y no la plantilla, al revés que en
+    el pizza: aquí las porciones no tienen que caer siempre en el mismo sitio,
+    porque no se comparan dos gráficos entre sí sino dos jugadores dentro del
+    mismo. Poner arriba la mayor diferencia hace que la respuesta se lea en la
+    primera línea.
+
+    Los dos ejes van de 0 a 100 hacia fuera desde el centro, así que la longitud
+    de cada barra es directamente el percentil y las dos mitades son
+    comparables.
+    """
+    if not len(data):
+        raise ValueError("Los dos jugadores no comparten ninguna métrica con percentil.")
+
+    diferencias = [b - a for a, b in zip(data.values_a, data.values_b, strict=True)]
+    orden = sorted(range(len(data)), key=lambda i: abs(diferencias[i]))
+
+    etiquetas = [data.labels[i] for i in orden]
+    izquierda = [data.values_a[i] for i in orden]
+    derecha = [data.values_b[i] for i in orden]
+
+    alto = max(2.6, 0.42 * len(etiquetas) + 1.0)
+    figura, ejes = _lienzo((6.4, alto))
+    posiciones = range(len(etiquetas))
+
+    # El jugador A crece hacia la izquierda, el B hacia la derecha.
+    ejes.barh(
+        list(posiciones), [-v for v in izquierda], color=palette.accent, height=0.66, zorder=3
+    )
+    ejes.barh(list(posiciones), derecha, color=palette.secondary, height=0.66, zorder=3)
+
+    for y, (a, b) in enumerate(zip(izquierda, derecha, strict=True)):
+        ejes.text(-a - 2, y, f"{a}", va="center", ha="right", color=TEXT_MUTED, fontsize=7.5)
+        ejes.text(b + 2, y, f"{b}", va="center", ha="left", color=TEXT_MUTED, fontsize=7.5)
+
+    ejes.axvline(0, color=GRID, linewidth=1.2, zorder=2)
+    ejes.set_yticks(list(posiciones), etiquetas, color=TEXT, fontsize=8)
+    ejes.set_xlim(-118, 118)
+    # Las marcas del eje se etiquetan en valor absoluto: el signo solo indica de
+    # quién es la barra, no un valor negativo.
+    marcas = [-100, -50, 0, 50, 100]
+    ejes.set_xticks(marcas, [str(abs(m)) for m in marcas], color=TEXT_MUTED, fontsize=7)
+    ejes.set_xlabel("Percentil", color=TEXT_MUTED, fontsize=8)
+    ejes.grid(axis="x", color=GRID, linewidth=0.6, alpha=0.5, zorder=1)
+    ejes.tick_params(colors=TEXT_MUTED)
+
+    figura.text(0.28, 0.965, name_a, size=9, ha="center", color=palette.accent, weight="bold")
+    figura.text(0.74, 0.965, name_b, size=9, ha="center", color=palette.secondary, weight="bold")
+    figura.tight_layout(rect=(0, 0, 1, 0.94))
     return figura

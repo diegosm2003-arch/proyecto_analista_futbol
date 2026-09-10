@@ -12,7 +12,7 @@ import streamlit as st
 
 from futbol_front import charts, presentation
 from futbol_front.client import ApiError
-from futbol_front.state import cached_catalog, cached_styles
+from futbol_front.state import cached_catalog, cached_conceded, cached_styles
 from futbol_front.theme import Palette, apply
 from futbol_front.views import browse
 
@@ -68,6 +68,14 @@ def render() -> None:
         st.info("No hay equipos que mostrar con estos filtros.")
         return
 
+    estilos, concedidos = st.tabs(["Estilo de juego", "Qué le rematan"])
+    with concedidos:
+        _concedidos(informe, temporada, paleta)
+    with estilos:
+        _pestana_de_estilos(informe, temporada, paleta)
+
+
+def _pestana_de_estilos(informe: dict, temporada: str, paleta) -> None:
     mapa, panel = st.columns([3, 2], gap="large")
     with mapa:
         _mapa(informe, temporada, paleta)
@@ -79,6 +87,73 @@ def render() -> None:
 
 # Valor que representa "las cinco a la vez" dentro de la navegacion por liga.
 TODAS = "__todas__"
+
+
+def _concedidos(informe: dict, temporada: str, paleta) -> None:
+    """Desde dónde le rematan a un equipo.
+
+    Es lo más cerca que se puede estar de medir defensa con esta fuente. No hay
+    entradas ni intercepciones, pero sí el resultado de defender: cuántos
+    remates permite un equipo, desde dónde y de qué calidad.
+
+    La distinción futbolística que esto permite y el total de goles encajados
+    esconde: un bloque bajo que concede muchos disparos lejanos y un bloque alto
+    que concede pocos pero claros son estilos opuestos que pueden acabar la
+    jornada con los mismos goles en contra.
+    """
+    equipos = sorted({e["team"] for e in informe["teams"]})
+    if not equipos:
+        st.info("No hay equipos cargados.")
+        return
+
+    equipo = st.selectbox("Equipo", equipos, key="equipo_concedidos")
+
+    try:
+        datos = cached_conceded(equipo, temporada)
+    except ApiError as error:
+        st.error(str(error))
+        return
+
+    if not datos["shots"]:
+        st.info("Sin tiros cargados para este equipo. Lanza el ETL con `--only shots`.")
+        return
+
+    campo, panel = st.columns([2, 3], gap="large")
+
+    with campo:
+        figura = charts.shot_map(
+            datos["shots"],
+            f"Le rematan a {equipo}",
+            paleta,
+            conceded=True,
+        )
+        st.pyplot(figura, width="content")
+
+    with panel:
+        columnas = st.columns(3)
+        columnas[0].metric("Remates recibidos", len(datos["shots"]))
+        columnas[1].metric("Goles encajados", datos["goals_conceded"])
+        columnas[2].metric(
+            "xG por remate",
+            f"{datos['xg_per_shot']:.3f}" if datos["xg_per_shot"] else "-",
+        )
+
+        partidos = max(datos["matches"], 1)
+        st.markdown(
+            '<div class="panel-detalle">'
+            '<div class="titulo">Por partido</div>'
+            f'<div class="valor">{len(datos["shots"]) / partidos:.1f} remates · '
+            f"{datos['xg_conceded'] / partidos:.2f} de xG en contra</div></div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            f"Sobre {datos['matches']} partidos con tiros cargados. La calidad media de "
+            "lo que concede dice más que el total: conceder veinte disparos lejanos no "
+            "es lo mismo que conceder cinco claros."
+        )
+
+        for aviso in datos["caveats"]:
+            st.caption(f":orange[{aviso}]")
 
 
 def _filtros(catalogo: dict) -> tuple[str, int]:

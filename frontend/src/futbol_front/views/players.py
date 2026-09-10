@@ -492,16 +492,32 @@ def _comparacion(perfil: dict, rival: dict, templates: list[dict], paleta: Palet
         st.info("Los dos jugadores no comparten métricas con percentil.")
         return
 
+    # Dos formas de leer la misma comparación, y responden a preguntas
+    # distintas: el radar dice cómo es cada uno, las barras dicen dónde está la
+    # diferencia. Con ocho o más métricas el radar comparado se satura, y es
+    # justo cuando las barras se leen mejor.
+    forma = st.radio(
+        "Cómo compararlos",
+        ["Radar", "Barras enfrentadas"],
+        horizontal=True,
+        help=(
+            "El radar enseña el perfil de los dos; las barras los ordenan por dónde más se separan."
+        ),
+    )
+
     grafico, panel = st.columns([3, 2], gap="large")
 
     with grafico:
-        figura = charts.compare(
-            datos,
-            f"{ficha['player']} ({ficha['team']})",
-            f"{ficha_rival['player']} ({ficha_rival['team']})",
-            _subtitulo(perfil),
-            paleta,
-        )
+        if forma == "Radar":
+            figura = charts.compare(
+                datos,
+                f"{ficha['player']} ({ficha['team']})",
+                f"{ficha_rival['player']} ({ficha_rival['team']})",
+                _subtitulo(perfil),
+                paleta,
+            )
+        else:
+            figura = charts.mirror_bars(datos, ficha["player"], ficha_rival["player"], paleta)
         st.pyplot(figura, width="content")
         if datos.missing:
             st.caption("Sin datos para: " + ", ".join(datos.missing))
@@ -513,6 +529,7 @@ def _comparacion(perfil: dict, rival: dict, templates: list[dict], paleta: Palet
         )
 
     with panel:
+        _mayor_diferencia(datos, ficha["player"], ficha_rival["player"])
         st.markdown(f"###### {ficha['player']}")
         st.markdown(presentation.summarise_profile(perfil))
         st.markdown(f"###### {ficha_rival['player']}")
@@ -600,6 +617,40 @@ def _reparto_de_tiros(tiros: list[dict]) -> None:
         ],
         hide_index=True,
         width="stretch",
+    )
+
+
+def _mayor_diferencia(datos, nombre_a: str, nombre_b: str) -> None:
+    """La métrica en la que más se separan, en una frase.
+
+    Es la respuesta que busca quien abre una comparación, y ni el radar ni las
+    barras la dan escrita: hay que mirarlas y deducirla.
+    """
+    if not len(datos):
+        return
+
+    diferencias = [
+        (abs(b - a), etiqueta, a, b)
+        for etiqueta, a, b in zip(datos.labels, datos.values_a, datos.values_b, strict=True)
+    ]
+    hueco, etiqueta, a, b = max(diferencias)
+    if hueco < 10:
+        st.markdown(
+            '<div class="panel-detalle">'
+            '<div class="titulo">Dónde se separan</div>'
+            '<div class="valor">En ninguna métrica se separan de forma clara: '
+            "son dos perfiles muy parecidos.</div></div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    mejor, peor = (nombre_a, nombre_b) if a > b else (nombre_b, nombre_a)
+    st.markdown(
+        '<div class="panel-detalle">'
+        '<div class="titulo">Dónde más se separan</div>'
+        f'<div class="valor">{etiqueta}: {mejor} está {hueco} percentiles por '
+        f"encima de {peor} ({max(a, b)} frente a {min(a, b)}).</div></div>",
+        unsafe_allow_html=True,
     )
 
 

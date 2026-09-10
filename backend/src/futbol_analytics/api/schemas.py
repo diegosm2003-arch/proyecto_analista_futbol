@@ -291,6 +291,26 @@ class SquadPlayer(BaseModel):
     market_value_eur: float | None
 
 
+class ConcededShots(BaseModel):
+    """Lo que le rematan a un equipo, y desde donde.
+
+    Es lo mas cerca que se puede estar de medir defensa con esta fuente:
+    Understat no publica entradas ni intercepciones, pero si donde le tiran a
+    cada equipo, que dice mucho de como defiende.
+    """
+
+    team: str
+    season: str
+    matches: int = Field(description="Partidos con tiros cargados")
+    shots: list[Shot]
+    xg_conceded: float
+    goals_conceded: int
+    xg_per_shot: float | None = Field(
+        default=None, description="Calidad media de lo que concede, sin penaltis"
+    )
+    caveats: list[str] = Field(default_factory=list)
+
+
 class TeamCard(BaseModel):
     """Un equipo tal y como se ensena en el navegador de la interfaz."""
 

@@ -141,6 +141,11 @@ class ApiClient:
         """Equipos de una temporada, con escudo."""
         return self._get("/teams", params={"season": season, "league": league})
 
+    def shots_conceded(self, team: str, season: str) -> dict[str, Any]:
+        """Tiros que recibe un equipo."""
+        ruta = f"/teams/{quote(team, safe='')}/shots-conceded"
+        return self._get(ruta, params={"season": season})
+
     def squad(self, team: str, season: str, league: str) -> list[dict[str, Any]]:
         """Plantilla de un equipo con edad y valor de mercado."""
         ruta = f"/teams/{quote(team, safe='')}/squad"

@@ -106,6 +106,9 @@ class FakeDataAccess:
     def shots(self, season: str, understat_id: str) -> list[dict]:
         return []
 
+    def shots_conceded(self, season: str, team: str) -> list[dict]:
+        return []
+
 
 LIGAS = [
     "ESP-La Liga",

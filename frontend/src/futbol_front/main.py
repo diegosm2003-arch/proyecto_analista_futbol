@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from futbol_front import branding
+from futbol_front import branding, enlaces
 from futbol_front.client import ApiError
 from futbol_front.state import cached_health
 from futbol_front.views import home, players, teams
@@ -45,7 +45,7 @@ def _cabecera(destino: str) -> None:
     suelto a la derecha, en el sitio donde suelen estar las acciones destructivas
     y la configuracion.
     """
-    logo, marca, ambito, _ = st.columns([1, 5, 4, 2], vertical_alignment="center")
+    logo, marca, ambito, compartir = st.columns([1, 5, 4, 2], vertical_alignment="center")
 
     with logo:
         st.markdown(
@@ -75,6 +75,9 @@ def _cabecera(destino: str) -> None:
         if elegido and elegido != VISTAS[destino][0]:
             home.ir_a(claves[etiquetas.index(elegido)])
             st.rerun()
+
+    with compartir:
+        enlaces.boton_de_copiado()
 
 
 def _estado_de_los_datos() -> None:
@@ -133,10 +136,17 @@ def _estado_de_los_datos() -> None:
             )
 
 
+# El orden importa: la URL se lee antes de decidir que pintar, para que un
+# enlace compartido abra la pantalla correcta, y se escribe despues, cuando el
+# estado ya refleja lo que el usuario acaba de hacer.
+enlaces.leer_una_vez()
+
 destino = home.destino_actual()
 if destino not in VISTAS:
     home.render()
 else:
     _cabecera(destino)
     VISTAS[destino][1]()
+
+enlaces.escribir()
 _estado_de_los_datos()

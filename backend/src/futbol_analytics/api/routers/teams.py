@@ -7,7 +7,14 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from futbol_analytics.api import services
 from futbol_analytics.api.dependencies import DataAccessDep
-from futbol_analytics.api.schemas import SquadPlayer, StyleReport, TeamCard, TeamStyle
+from futbol_analytics.api.schemas import (
+    ConcededShots,
+    Shot,
+    SquadPlayer,
+    StyleReport,
+    TeamCard,
+    TeamStyle,
+)
 
 router = APIRouter(prefix="/teams", tags=["equipos"])
 
@@ -98,6 +105,48 @@ def squad(
     esta en gente que aun va a subir o en gente que ya solo puede bajar.
     """
     return [SquadPlayer(**fila) for fila in data.squad_market(season, league, team)]
+
+
+@router.get("/{team}/shots-conceded", summary="Tiros que recibe un equipo")
+def shots_conceded(team: str, season: str, data: DataAccessDep) -> ConcededShots:
+    """Desde dónde le rematan a un equipo.
+
+    Con esta fuente no hay entradas ni intercepciones, así que no se puede medir
+    la acción defensiva. Sí se puede medir su resultado: cuántos remates permite
+    un equipo, desde dónde y de qué calidad. Un bloque bajo que concede muchos
+    disparos lejanos y un bloque alto que concede pocos pero claros son estilos
+    opuestos que el total de goles encajados confunde en una sola cifra.
+    """
+    crudos = data.shots_conceded(season, team)
+    tiros = [Shot(**_solo_tiro(t)) for t in crudos]
+    sin_penalti = [t for t in tiros if t.situation != "Penalty"]
+    xg_sin_penalti = sum(t.xg or 0.0 for t in sin_penalti)
+
+    avisos = []
+    if not tiros:
+        avisos.append("Sin tiros cargados para este equipo. Lanza el ETL con `--only shots`.")
+    else:
+        avisos.append(
+            "Esto mide lo que un equipo permite, no cómo defiende: Understat no publica "
+            "entradas ni intercepciones. Conceder pocos remates puede venir de defender "
+            "bien o de tener el balón todo el partido."
+        )
+
+    return ConcededShots(
+        team=team,
+        season=season,
+        matches=len({t.get("game_id") for t in crudos if t.get("game_id")}),
+        shots=tiros,
+        xg_conceded=round(sum(t.xg or 0.0 for t in tiros), 3),
+        goals_conceded=sum(1 for t in tiros if t.result == "Goal"),
+        xg_per_shot=(round(xg_sin_penalti / len(sin_penalti), 3) if sin_penalti else None),
+        caveats=avisos,
+    )
+
+
+def _solo_tiro(fila: dict) -> dict:
+    """Quita de la fila lo que el modelo publico no declara."""
+    return {k: v for k, v in fila.items() if k in Shot.model_fields}
 
 
 def _style(fila: pd.Series) -> TeamStyle:

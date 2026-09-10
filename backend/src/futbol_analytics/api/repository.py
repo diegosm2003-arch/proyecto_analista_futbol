@@ -76,6 +76,9 @@ class DataAccess(Protocol):
     def shots(self, season: str, understat_id: str) -> list[dict]:
         """Tiros de un jugador en una temporada."""
 
+    def shots_conceded(self, season: str, team: str) -> list[dict]:
+        """Tiros que ha recibido un equipo, con donde se hicieron."""
+
 
 class SqlDataAccess:
     """Implementacion sobre PostgreSQL."""
@@ -222,6 +225,32 @@ class SqlDataAccess:
                 shot_event.c.season == season,
                 shot_event.c.understat_id == understat_id,
             )
+            .order_by(shot_event.c.match_date, shot_event.c.minute)
+        )
+        with self._engine.connect() as conexion:
+            return [dict(fila) for fila in conexion.execute(consulta).mappings()]
+
+    def shots_conceded(self, season: str, team: str) -> list[dict]:
+        """Tiros que ha recibido un equipo, con donde se hicieron.
+
+        Se derivan del propio `shot_event` sin guardar el rival: los partidos de
+        un equipo son aquellos en los que ha rematado, y los tiros concedidos
+        son los del resto de equipos en esos mismos partidos. Guardar una
+        columna de rival seria un dato duplicado que puede quedar desalineado.
+
+        Las coordenadas de Understat van siempre desde la perspectiva de quien
+        remata, asi que estos tiros se pintan en el mismo medio campo sin
+        transformar nada: lo que se ve es desde donde le rematan.
+        """
+        suyos = (
+            select(shot_event.c.game_id)
+            .where(shot_event.c.season == season, shot_event.c.team == team)
+            .distinct()
+            .scalar_subquery()
+        )
+        consulta = (
+            select(shot_event)
+            .where(shot_event.c.game_id.in_(suyos), shot_event.c.team != team)
             .order_by(shot_event.c.match_date, shot_event.c.minute)
         )
         with self._engine.connect() as conexion:
