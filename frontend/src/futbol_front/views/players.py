@@ -20,7 +20,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from futbol_front import charts, presentation
+from futbol_front import charts, presentation, reports
 from futbol_front.client import ApiError
 from futbol_front.presentation import season_label
 from futbol_front.state import (
@@ -154,6 +154,7 @@ def render() -> None:
     )
     with rendimiento:
         _perfil(perfil, plantillas, paleta)
+        _informe(perfil, plantillas, base, paleta)
         _similares(perfil, base, paleta)
     with tiros:
         _tiros(perfil["player"], paleta)
@@ -384,6 +385,57 @@ _ESTILO_AVISO = {
     "debilidad": (st.error, ":material/trending_down:", "Muy por debajo"),
     "rasgo": (st.info, ":material/insights:", "Rasgo marcado"),
 }
+
+
+def _informe(perfil: dict, plantillas: list[dict], base: str, paleta: Palette) -> None:
+    """Descarga del informe de una página.
+
+    Es lo que convierte la plataforma en algo que un ojeador se lleva a una
+    reunión: un documento que se imprime, se anota a mano y se pasa por encima
+    de la mesa, en lugar de un panel que hay que abrir con un portátil delante.
+
+    Se genera solo al pulsar y no en cada pasada: montar el PDF cuesta más que
+    dibujar el gráfico, y la mayoría de las visitas a una ficha no acaban en
+    descarga.
+    """
+    ficha = perfil["player"]
+    if not st.button("Preparar informe en PDF", icon=":material/description:"):
+        st.caption(
+            "Una página con el perfil, su lectura, el contexto de mercado, los "
+            "comparables y las advertencias. Pensado para imprimir."
+        )
+        return
+
+    with st.spinner("Montando el informe…"):
+        plantilla = _plantilla(plantillas, ficha["position_group"])
+        mercado = _sin_fallar(cached_market, ficha["player"], ficha["season"], ficha["team"])
+        similares = _sin_fallar(
+            cached_similar, ficha["player"], ficha["season"], ficha["team"], base, COMPARABLES
+        )
+        pdf = reports.player_report(perfil, plantilla, mercado, similares, paleta)
+
+    st.download_button(
+        "Descargar informe",
+        data=pdf,
+        file_name=presentation.chart_filename(
+            ficha["player"], ficha["season"], "informe", extension="pdf"
+        ),
+        mime="application/pdf",
+        icon=":material/download:",
+        type="primary",
+    )
+
+
+def _sin_fallar(funcion, *args):
+    """Llama a la API y devuelve `None` si no responde.
+
+    El informe se monta con lo que haya: que falte el valor de mercado o los
+    comparables deja huecos en el PDF, pero no debe impedir generarlo.
+    """
+    try:
+        return funcion(*args)
+    except ApiError:
+        return None
 
 
 # --- Comparables ------------------------------------------------------------

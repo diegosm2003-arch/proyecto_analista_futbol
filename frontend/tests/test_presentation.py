@@ -362,3 +362,11 @@ def test_una_temporada_con_otro_formato_se_deja_como_esta(raro: str) -> None:
     # Antes de inventarse un formato, se devuelve lo que hay: es preferible
     # ensenar un codigo raro a ensenar uno bonito y equivocado.
     assert presentation.season_label(raro) == raro
+
+
+def test_el_nombre_del_informe_lleva_su_extension() -> None:
+    # El PDF y el PNG comparten la funcion de nombre; sin la extension el
+    # navegador ofreceria guardar un informe como si fuera una imagen.
+    nombre = presentation.chart_filename("Lamine Yamal", "2627", "informe", extension="pdf")
+
+    assert nombre == "lamine-yamal-2627-informe.pdf"

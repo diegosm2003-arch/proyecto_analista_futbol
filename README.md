@@ -618,6 +618,27 @@ justo cuando las barras se leen mejor.
 El panel de al lado escribe la respuesta que ninguno de los dos graficos da
 escrita: en que metrica se separan mas y cuanto.
 
+### Informe de jugador en PDF
+
+Una pagina con el perfil, su lectura, el contexto de mercado, los comparables y
+las advertencias. Convierte la plataforma en algo que un ojeador se lleva a una
+reunion: un documento que se imprime, se anota a mano y se pasa por encima de la
+mesa, en lugar de un panel que hay que abrir con un portatil delante.
+
+**Se genera con matplotlib, sin dependencias nuevas.** `reportlab` y
+`weasyprint` no hacen falta: todos los graficos ya se dibujan con matplotlib,
+que exporta PDF vectorial de serie, y `PyPizza` acepta pintar en un eje que se
+le pasa, asi que el radar entra en la pagina sin convertirse en imagen.
+`weasyprint` ademas arrastra librerias del sistema que engordarian una imagen
+que hoy es ligera.
+
+Una pagina y no varias: un informe de scouting que ocupa tres hojas no se lee,
+se archiva.
+
+**Las advertencias van dentro del PDF**, no se quedan en la pantalla. Es donde
+mas importan: el documento circula solo, sin nadie que explique que el percentil
+se calculo sobre cinco jornadas.
+
 ### Cada analisis, un enlace
 
 El estado de la vista —ambito, liga, equipo y temporada— viaja en la URL, asi
