@@ -393,3 +393,58 @@ def _marcar_penaltis(shots: pd.DataFrame) -> pd.Series:
     if penaltis.any():
         logger.info("Penaltis identificados", extra={"tiros": int(penaltis.sum())})
     return shots["situation"].mask(penaltis, "Penalty")
+
+
+# Metricas que se copian tal cual del partido, con su tipo. Se enumeran en lugar
+# de tomarlas del catalogo porque el catalogo describe la temporada, y aqui no
+# hay percentiles ni valores por 90: son totales de un partido.
+_ENTEROS_DE_PARTIDO = (
+    "minutes",
+    "goals",
+    "own_goals",
+    "shots",
+    "assists",
+    "key_passes",
+    "yellow_cards",
+    "red_cards",
+)
+_DECIMALES_DE_PARTIDO = ("xg", "xa", "xg_chain", "xg_buildup")
+
+
+def build_match_frame(matches: pd.DataFrame) -> pd.DataFrame:
+    """Convierte los partidos de Understat en filas de `player_match`.
+
+    No agrega nada: una fila por jugador y partido, tal y como llega. Las medias
+    moviles y la forma reciente se calculan en la capa de analisis, que es donde
+    se pueden cambiar sin volver a descargar nada.
+    """
+    if matches.empty:
+        return pd.DataFrame()
+
+    plano = matches.reset_index()
+    filas = pd.DataFrame(
+        {
+            "game_id": plano["game_id"].astype("string"),
+            "understat_id": plano["player_id"].astype("string"),
+            "league": plano["league"].astype("string"),
+            "season": plano["season"].astype("string"),
+            "team": plano["team"].astype("string"),
+            "player": plano["player"].astype("string"),
+            "match_label": plano["game"].astype("string"),
+            "position": plano["position"].astype("string"),
+        }
+    )
+    for columna in _ENTEROS_DE_PARTIDO:
+        filas[columna] = pd.to_numeric(plano.get(columna), errors="coerce").astype("Int64")
+    for columna in _DECIMALES_DE_PARTIDO:
+        filas[columna] = pd.to_numeric(plano.get(columna), errors="coerce")
+
+    # Sin las dos partes de la clave la fila no se puede insertar ni encontrar.
+    filas = filas.dropna(subset=["game_id", "understat_id"])
+    antes = len(filas)
+    filas = filas.drop_duplicates(subset=["game_id", "understat_id"])
+    if len(filas) != antes:
+        logger.warning("Partidos repetidos descartados", extra={"descartados": antes - len(filas)})
+
+    logger.info("Filas de partido preparadas", extra={"filas": len(filas)})
+    return filas.astype(object).where(pd.notna(filas), None)

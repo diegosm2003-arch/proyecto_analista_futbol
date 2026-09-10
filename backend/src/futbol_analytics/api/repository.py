@@ -18,6 +18,7 @@ from futbol_analytics.db import create_schema
 from futbol_analytics.db.schema import (
     etl_run,
     player_market_value,
+    player_match,
     player_profile,
     player_season,
     player_transfers,
@@ -78,6 +79,12 @@ class DataAccess(Protocol):
 
     def shots_conceded(self, season: str, team: str) -> list[dict]:
         """Tiros que ha recibido un equipo, con donde se hicieron."""
+
+    def matches(self, season: str, understat_id: str) -> pd.DataFrame:
+        """Partidos de un jugador en una temporada, uno por fila."""
+
+    def market_context(self, season: str) -> pd.DataFrame:
+        """Edad, contrato y valor de cada jugador con ficha, por `understat_id`."""
 
 
 class SqlDataAccess:
@@ -255,6 +262,48 @@ class SqlDataAccess:
         )
         with self._engine.connect() as conexion:
             return [dict(fila) for fila in conexion.execute(consulta).mappings()]
+
+    def matches(self, season: str, understat_id: str) -> pd.DataFrame:
+        consulta = select(player_match).where(
+            player_match.c.season == season,
+            player_match.c.understat_id == understat_id,
+        )
+        return self._read(consulta)
+
+    def market_context(self, season: str) -> pd.DataFrame:
+        """Edad, contrato y valor de cada jugador con ficha.
+
+        Se sirve como una tabla y no jugador a jugador porque el buscador de
+        scouting filtra sobre toda la poblacion a la vez: pedirlo uno por uno
+        serian cientos de consultas para responder a una sola pregunta.
+        """
+        ultimo = (
+            select(
+                player_market_value.c.understat_id,
+                func.max(player_market_value.c.valuation_date).label("fecha"),
+            )
+            .group_by(player_market_value.c.understat_id)
+            .subquery()
+        )
+        consulta = (
+            select(
+                player_profile.c.understat_id,
+                player_profile.c.age,
+                player_profile.c.position.label("tm_position"),
+                player_profile.c.nationality,
+                player_profile.c.contract_until,
+                player_market_value.c.market_value_eur,
+            )
+            .select_from(player_profile)
+            .join(ultimo, ultimo.c.understat_id == player_profile.c.understat_id, isouter=True)
+            .join(
+                player_market_value,
+                (player_market_value.c.understat_id == ultimo.c.understat_id)
+                & (player_market_value.c.valuation_date == ultimo.c.fecha),
+                isouter=True,
+            )
+        )
+        return self._read(consulta)
 
     def _read(self, consulta) -> pd.DataFrame:
         with self._engine.connect() as conexion:

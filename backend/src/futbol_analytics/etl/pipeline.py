@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from futbol_analytics.config import BIG_5_LEAGUES, get_settings
 from futbol_analytics.db import create_schema, get_engine, player_season, team_season
-from futbol_analytics.db.schema import shot_event
+from futbol_analytics.db.schema import player_match, shot_event
 from futbol_analytics.etl import extract, load, transform, understat_source
 from futbol_analytics.metrics import PLAYER_METRICS, TEAM_METRICS, stat_types
 
@@ -30,6 +30,7 @@ class RunResult:
     player_rows: int
     team_rows: int
     shot_rows: int = 0
+    match_rows: int = 0
 
 
 def run(
@@ -41,6 +42,7 @@ def run(
     dry_run: bool = False,
     use_cache: bool | None = None,
     load_shots: bool = True,
+    load_matches: bool = True,
 ) -> RunResult:
     """Ejecuta el ETL completo.
 
@@ -59,10 +61,12 @@ def run(
         players = _prepare_players(leagues, seasons, use_cache) if load_players else None
         teams = _prepare_teams(leagues, seasons, use_cache) if load_teams else None
         shots = _prepare_shots(leagues, seasons) if load_shots else None
+        partidos = _prepare_matches(leagues, seasons) if load_matches else None
         result = RunResult(
             player_rows=0 if players is None else len(players),
             team_rows=0 if teams is None else len(teams),
             shot_rows=0 if shots is None else len(shots),
+            match_rows=0 if partidos is None else len(partidos),
         )
         # asdict y no __dict__: el dataclass usa slots, asi que no tiene __dict__ y
         # la simulacion terminaba siempre con AttributeError.
@@ -88,6 +92,11 @@ def run(
         if load_shots:
             shots = _prepare_shots(leagues, seasons)
             shot_rows = load.upsert(engine, shot_event, transform.to_records(shots))
+
+        match_rows = 0
+        if load_matches:
+            partidos = _prepare_matches(leagues, seasons)
+            match_rows = load.upsert(engine, player_match, transform.to_records(partidos))
     except Exception as error:
         load.finish_run(engine, run_id, status="failed", error=str(error))
         logger.exception("ETL fallido")
@@ -98,9 +107,19 @@ def run(
         )
         logger.info(
             "ETL terminado",
-            extra={"jugadores": player_rows, "equipos": team_rows, "tiros": shot_rows},
+            extra={
+                "jugadores": player_rows,
+                "equipos": team_rows,
+                "tiros": shot_rows,
+                "partidos": match_rows,
+            },
         )
-        return RunResult(player_rows=player_rows, team_rows=team_rows, shot_rows=shot_rows)
+        return RunResult(
+            player_rows=player_rows,
+            team_rows=team_rows,
+            shot_rows=shot_rows,
+            match_rows=match_rows,
+        )
 
 
 def _prepare_shots(leagues: list[str], seasons: list[str]) -> pd.DataFrame:
@@ -112,6 +131,12 @@ def _prepare_shots(leagues: list[str], seasons: list[str]) -> pd.DataFrame:
     """
     crudos = understat_source.read_shot_events(leagues, seasons)
     return transform.build_shot_frame(crudos)
+
+
+def _prepare_matches(leagues: list[str], seasons: list[str]) -> pd.DataFrame:
+    """Descarga y transforma las estadisticas por partido."""
+    crudos = understat_source.read_player_match_stats(leagues, seasons)
+    return transform.build_match_frame(crudos)
 
 
 def _avisar_si_falta_poblacion(leagues: list[str]) -> None:

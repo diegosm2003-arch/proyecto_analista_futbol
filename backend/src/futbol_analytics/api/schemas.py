@@ -198,6 +198,63 @@ class ShotMap(BaseModel):
     caveats: list[str] = Field(default_factory=list)
 
 
+class MatchPoint(BaseModel):
+    """Un partido dentro de la trayectoria de la temporada."""
+
+    match_label: str | None
+    position: str | None = Field(
+        default=None, description="La que jugo ESE dia, no la de la temporada"
+    )
+    minutes: int
+    goals: int
+    xg: float
+    assists: int
+    xa: float
+    cumulative_goals: int
+    cumulative_xg: float
+
+
+class PlayerForm(BaseModel):
+    """Como va la temporada y como esta ahora, que son preguntas distintas."""
+
+    player: PlayerSummary
+    matches: list[MatchPoint]
+    played: int
+    recent_matches: int
+    recent_xg90: float | None
+    season_xg90: float | None
+    delta_xg90: float | None = Field(
+        default=None, description="Cuanto se separa la ventana reciente de su media"
+    )
+    caveats: list[str] = Field(default_factory=list)
+
+
+class ScoutingHit(BaseModel):
+    """Un jugador que cumple los criterios de busqueda."""
+
+    league: str
+    team: str
+    player: str
+    position_group: PositionGroup | None
+    minutes: int | None
+    age: int | None
+    contract_until: date | None
+    months_left: int | None = Field(default=None, description="Meses hasta el fin de contrato")
+    market_value_eur: float | None
+    metric: str
+    label: str
+    percentile: float
+
+
+class ScoutingResult(BaseModel):
+    """Resultado del buscador de scouting."""
+
+    season: str
+    metric: str
+    hits: list[ScoutingHit]
+    caveats: list[str] = Field(default_factory=list)
+
+
 class PlayerCard(BaseModel):
     """Ficha de Transfermarkt: el contexto que un percentil no da."""
 

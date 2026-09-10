@@ -27,6 +27,7 @@ DESTINO = "destino"
 
 JUGADORES = "jugadores"
 EQUIPOS = "equipos"
+SCOUTING = "scouting"
 
 
 def ir_a(destino: str) -> None:
@@ -59,7 +60,7 @@ def render() -> None:
 
     # Estrechas y altas, con el icono arriba: una ficha ancha y baja se lee como
     # una barra de navegacion, no como una eleccion.
-    _, izquierda, derecha, _ = st.columns([1, 2, 2, 1], gap="large")
+    izquierda, centro, derecha = st.columns(3, gap="large")
 
     _tarjeta(
         izquierda,
@@ -74,7 +75,7 @@ def render() -> None:
         principal=True,
     )
     _tarjeta(
-        derecha,
+        centro,
         icono=ICONO_EQUIPO,
         titulo="Equipos",
         texto=(
@@ -83,6 +84,18 @@ def render() -> None:
         ),
         etiqueta="Analizar equipos",
         destino=EQUIPOS,
+        principal=False,
+    )
+    _tarjeta(
+        derecha,
+        icono=ICONO_BUSCADOR,
+        titulo="Scouting",
+        texto=(
+            "Quién rinde por encima de un percentil y además encaja por edad, "
+            "contrato y precio. No quién es bueno: a quién se puede ir a buscar."
+        ),
+        etiqueta="Buscar jugadores",
+        destino=SCOUTING,
         principal=False,
     )
 
@@ -111,6 +124,17 @@ ICONO_EQUIPO = (
     'stroke-linejoin="round">'
     '<path d="M12 2.5l7.5 2.5v6c0 4.6-3.1 8.6-7.5 10-4.4-1.4-7.5-5.4-7.5-10v-6z"/>'
     '<path d="M12 7.5l1.6 3.2 3.4.5-2.5 2.4.6 3.4-3.1-1.6-3.1 1.6.6-3.4-2.5-2.4 3.4-.5z"/>'
+    "</svg>"
+)
+
+
+ICONO_BUSCADOR = (
+    '<svg viewBox="0 0 24 24" width="56" height="56" fill="none" '
+    'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" '
+    'stroke-linejoin="round">'
+    '<circle cx="10.5" cy="10.5" r="6.5"/>'
+    '<path d="M15.4 15.4L21 21"/>'
+    '<path d="M7.6 10.5l2 2 3.8-4"/>'
     "</svg>"
 )
 

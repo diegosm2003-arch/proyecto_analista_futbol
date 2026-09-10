@@ -131,6 +131,46 @@ team_season = Table(
 
 # Trazabilidad de las cargas: sin esto, un dato raro en la interfaz no se puede
 # atribuir a una ejecucion concreta del ETL.
+player_match = Table(
+    "player_match",
+    metadata,
+    # Un jugador solo puede aparecer una vez por partido, asi que la pareja
+    # identifica la fila y la recarga es idempotente.
+    Column("game_id", Text, primary_key=True),
+    Column("understat_id", Text, primary_key=True),
+    Column("league", Text, nullable=False),
+    Column("season", Text, nullable=False),
+    Column("team", Text, nullable=False),
+    Column("player", Text, nullable=False),
+    Column(
+        "match_label", Text, nullable=True, comment="Fecha y rivales, como los publica la fuente"
+    ),
+    Column(
+        "position",
+        Text,
+        nullable=True,
+        comment="La que jugo ESE dia, no la de la temporada: detecta cambios de rol",
+    ),
+    Column("minutes", Integer, nullable=True),
+    Column("goals", Integer, nullable=True),
+    Column("own_goals", Integer, nullable=True),
+    Column("shots", Integer, nullable=True),
+    Column("xg", Float, nullable=True),
+    Column("assists", Integer, nullable=True),
+    Column("xa", Float, nullable=True),
+    Column("key_passes", Integer, nullable=True),
+    Column("xg_chain", Float, nullable=True),
+    Column("xg_buildup", Float, nullable=True),
+    Column("yellow_cards", Integer, nullable=True),
+    Column("red_cards", Integer, nullable=True),
+    Column("scraped_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Index("ix_player_match_temporada", "league", "season"),
+    comment=(
+        "Una fila por jugador y partido. Es lo que permite hablar de forma reciente y "
+        "de racha, que con datos agregados por temporada es imposible."
+    ),
+)
+
 shot_event = Table(
     "shot_event",
     metadata,

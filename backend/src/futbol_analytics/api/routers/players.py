@@ -3,24 +3,30 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
+from datetime import date
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
-from futbol_analytics.analysis import similarity
+from futbol_analytics.analysis import form, similarity
 from futbol_analytics.api import services
 from futbol_analytics.api.dependencies import DataAccessDep
 from futbol_analytics.api.repository import DataAccess
 from futbol_analytics.api.schemas import (
     Basis,
+    MatchPoint,
     MetricPercentile,
     PlayerCard,
+    PlayerForm,
     PlayerMarket,
     PlayerProfile,
     PlayerSummary,
     Population,
     PositionGroup,
+    ScoutingHit,
+    ScoutingResult,
     Shot,
     ShotMap,
     SimilarPlayer,
@@ -386,6 +392,198 @@ def shots(
         xg_per_shot=(round(xg_sin_penalti / len(sin_penalti), 3) if sin_penalti else None),
         caveats=avisos,
     )
+
+
+@router.get("/{player}/form", summary="Trayectoria y forma de un jugador")
+def player_form(
+    player: str,
+    season: str,
+    data: DataAccessDep,
+    team: str | None = Query(default=None, description="Necesario si cambió de equipo"),
+) -> PlayerForm:
+    """Cómo va la temporada y cómo está ahora.
+
+    Son preguntas distintas y a menudo la segunda es la que importa: un
+    delantero con seis goles en veinte partidos y otro con seis en los últimos
+    cuatro tienen el mismo número y no están en el mismo momento.
+
+    Se compara al jugador **consigo mismo** y no con la liga. Decir que está en
+    el percentil 80 de las últimas jornadas mezcla lo bueno que es con lo bien
+    que está; medir sus últimos partidos contra su propia media aísla lo segundo.
+    """
+    jugadores = services.enriched_players(data, season)
+    fila = jugadores[(jugadores["player"] == player) & (jugadores["season"] == season)]
+    if team:
+        fila = fila[fila["team"] == team]
+    if fila.empty:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{player!r} no aparece en la temporada {season!r}.",
+        )
+
+    resumen = _summary(fila.iloc[0])
+    understat_id = fila.iloc[0].get("understat_id")
+    partidos = (
+        data.matches(season, str(understat_id))
+        if understat_id and not pd.isna(understat_id)
+        else pd.DataFrame()
+    )
+
+    trayectoria = form.trajectory(partidos)
+    resultado = form.form(partidos)
+
+    avisos = []
+    if not trayectoria:
+        avisos.append(
+            "Sin partidos cargados. Lanza el ETL con `--only matches`, o puede que "
+            "este jugador no haya disputado ninguno."
+        )
+    if resultado.caveat:
+        avisos.append(resultado.caveat)
+
+    return PlayerForm(
+        player=resumen,
+        # asdict y no vars: los dataclass del analisis usan slots, asi que no
+        # tienen __dict__ y vars() revienta.
+        matches=[MatchPoint(**asdict(p)) for p in trayectoria],
+        played=resultado.matches,
+        recent_matches=resultado.recent_matches,
+        recent_xg90=resultado.recent_xg90,
+        season_xg90=resultado.season_xg90,
+        delta_xg90=resultado.delta,
+        caveats=avisos,
+    )
+
+
+@router.get("/scouting", summary="Buscador de scouting")
+def scouting(
+    season: str,
+    metric: str,
+    data: DataAccessDep,
+    min_percentile: float = Query(default=80.0, ge=0, le=100),
+    position_group: PositionGroup | None = None,
+    max_age: int | None = Query(default=None, ge=15, le=45),
+    max_months_left: int | None = Query(
+        default=None, ge=0, le=120, description="Meses hasta el fin de contrato"
+    ),
+    max_value_eur: float | None = Query(default=None, ge=0),
+    limit: int = Query(default=25, ge=1, le=100),
+) -> ScoutingResult:
+    """Quien rinde bien y además encaja por edad, contrato y precio.
+
+    Es la pregunta con la que trabaja de verdad una dirección deportiva, y la
+    que separa una herramienta de consulta de una de scouting: no "quién es
+    bueno", sino "a quién puedo ir a buscar".
+
+    El filtro de contrato es el más práctico de todos. Un jugador con año y
+    medio por delante y un percentil alto es una operación cara; el mismo
+    jugador a seis meses del final es otra conversación.
+
+    **El valor de mercado no es una medida de calidad.** Incorpora edad,
+    contrato restante, tamaño del club y nacionalidad, así que un jugador
+    "barato" para su percentil puede serlo por razones legítimas. El filtro está
+    para acotar por presupuesto, no para detectar gangas.
+    """
+    percentiles = _percentiles(data, season, "position")
+    if percentiles.empty:
+        return ScoutingResult(season=season, metric=metric, hits=[], caveats=["Sin datos."])
+
+    seleccion = percentiles[
+        (percentiles["metric"] == metric) & (percentiles["percentile_per90"] >= min_percentile)
+    ]
+    if position_group:
+        seleccion = seleccion[seleccion["position_group"] == position_group]
+    if seleccion.empty:
+        return ScoutingResult(
+            season=season,
+            metric=metric,
+            hits=[],
+            caveats=["Ningún jugador supera ese percentil con estos filtros."],
+        )
+
+    # El frame de percentiles identifica al jugador por (liga, temporada, equipo,
+    # nombre) y no arrastra el `understat_id`, que es el puente con Transfermarkt.
+    # Se toma del frame de jugadores en lugar de meterlo en la capa de analisis,
+    # que no lo necesita para nada.
+    jugadores = services.enriched_players(data, season)
+    claves = ["league", "season", "team", "player"]
+    if "understat_id" in jugadores.columns:
+        seleccion = seleccion.merge(
+            jugadores[[*claves, "understat_id"]].drop_duplicates(subset=claves),
+            on=claves,
+            how="left",
+        )
+
+    contexto = data.market_context(season)
+    if not contexto.empty and "understat_id" in seleccion.columns:
+        seleccion = seleccion.merge(contexto, on="understat_id", how="left")
+    else:
+        for columna in ("age", "contract_until", "market_value_eur", "nationality"):
+            seleccion[columna] = None
+
+    hoy = date.today()
+    seleccion["months_left"] = seleccion["contract_until"].map(lambda f: _meses_hasta(f, hoy))
+
+    avisos = []
+    sin_ficha = int(seleccion["age"].isna().sum())
+    if sin_ficha:
+        avisos.append(
+            f"{sin_ficha} de {len(seleccion)} jugadores no tienen ficha de Transfermarkt: "
+            "no se pueden filtrar por edad, contrato ni valor, y se quedan fuera si usas "
+            "esos filtros."
+        )
+
+    if max_age is not None:
+        seleccion = seleccion[seleccion["age"].notna() & (seleccion["age"] <= max_age)]
+    if max_months_left is not None:
+        seleccion = seleccion[
+            seleccion["months_left"].notna() & (seleccion["months_left"] <= max_months_left)
+        ]
+    if max_value_eur is not None:
+        seleccion = seleccion[
+            seleccion["market_value_eur"].notna() & (seleccion["market_value_eur"] <= max_value_eur)
+        ]
+
+    avisos.append(
+        "El valor de mercado no mide calidad: incorpora edad, contrato, tamaño del club "
+        "y nacionalidad. Sirve para acotar por presupuesto, no para detectar gangas."
+    )
+
+    mejores = seleccion.sort_values("percentile_per90", ascending=False).head(limit)
+    return ScoutingResult(
+        season=season,
+        metric=metric,
+        hits=[
+            ScoutingHit(
+                league=fila["league"],
+                team=fila["team"],
+                player=fila["player"],
+                position_group=_opcional(fila.get("position_group")),
+                minutes=None if pd.isna(fila.get("minutes")) else int(fila["minutes"]),
+                age=None if pd.isna(fila.get("age")) else int(fila["age"]),
+                contract_until=(
+                    None if pd.isna(fila.get("contract_until")) else fila["contract_until"]
+                ),
+                months_left=(
+                    None if pd.isna(fila.get("months_left")) else int(fila["months_left"])
+                ),
+                market_value_eur=_numero(fila.get("market_value_eur")),
+                metric=metric,
+                label=str(fila["label"]),
+                percentile=round(float(fila["percentile_per90"]), 1),
+            )
+            for _, fila in mejores.iterrows()
+        ],
+        caveats=avisos,
+    )
+
+
+def _meses_hasta(fin: object, hoy: date) -> float | None:
+    """Meses que quedan de contrato. `None` si no consta la fecha."""
+    if fin is None or pd.isna(fin):
+        return None
+    fecha = fin if isinstance(fin, date) else pd.to_datetime(fin).date()
+    return max(0, (fecha.year - hoy.year) * 12 + fecha.month - hoy.month)
 
 
 def _familias() -> dict[str, list[str]]:

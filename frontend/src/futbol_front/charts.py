@@ -597,3 +597,64 @@ def mirror_bars(
     figura.text(0.74, 0.965, name_b, size=9, ha="center", color=palette.secondary, weight="bold")
     figura.tight_layout(rect=(0, 0, 1, 0.94))
     return figura
+
+
+def cumulative_goals(
+    matches: list[dict],
+    title: str,
+    palette: Palette = DEFAULT,
+) -> Figure:
+    """Goles acumulados frente a xG acumulado a lo largo de la temporada.
+
+    Es el gráfico honesto cuando hay pocas jornadas. Una media móvil de tres
+    partidos sobre cinco es prácticamente el dato bruto con otro nombre, y
+    sugiere una tendencia donde solo hay ruido; la curva acumulada no promete
+    tendencia, solo enseña cómo se ha llegado hasta aquí.
+
+    Y ahí está lo que ninguna cifra de temporada dice: si un sobrerrendimiento
+    viene de un partido suelto —las dos líneas se separan de golpe y luego van
+    en paralelo— o de todos, que es cuando empieza a merecer atención.
+    """
+    if not matches:
+        raise ValueError("Este jugador no tiene partidos cargados.")
+
+    figura, ejes = _lienzo((5.6, 3.2))
+    x = range(1, len(matches) + 1)
+    goles = [m["cumulative_goals"] for m in matches]
+    xg = [m["cumulative_xg"] for m in matches]
+
+    ejes.plot(
+        x,
+        xg,
+        color=palette.secondary,
+        linewidth=2,
+        marker="o",
+        markersize=4,
+        label="xG acumulado",
+        zorder=3,
+    )
+    ejes.plot(
+        x,
+        goles,
+        color=palette.accent,
+        linewidth=2.2,
+        marker="o",
+        markersize=4,
+        label="Goles",
+        zorder=4,
+    )
+    # El area entre las dos es la diferencia: verla pintada evita tener que
+    # restar dos curvas a ojo.
+    ejes.fill_between(x, goles, xg, color=palette.accent, alpha=0.12, zorder=2)
+
+    ejes.set_xticks(list(x), [str(i) for i in x], color=TEXT_MUTED, fontsize=7)
+    ejes.set_xlabel("Partidos jugados", color=TEXT_MUTED, fontsize=8)
+    ejes.set_ylabel("Acumulado", color=TEXT_MUTED, fontsize=8)
+    ejes.set_title(title, color=TEXT, fontsize=10, weight="bold")
+    ejes.grid(color=GRID, linewidth=0.6, alpha=0.6, zorder=1)
+    ejes.tick_params(colors=TEXT_MUTED, labelsize=7)
+    leyenda = ejes.legend(loc="upper left", fontsize=7.5, frameon=False)
+    for texto in leyenda.get_texts():
+        texto.set_color(TEXT_MUTED)
+    figura.tight_layout()
+    return figura

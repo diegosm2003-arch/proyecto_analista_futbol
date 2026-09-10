@@ -540,6 +540,40 @@ ejes a la vez y no dice por donde empezar; el panel de la derecha responde a eso
 sin obligar a bajar. Por eso el grafico se dibuja mas pequeno de lo habitual:
 caben los dos, pero solo si el circulo no ocupa la pantalla entera.
 
+### Buscador de scouting
+
+Quien rinde por encima de un percentil **y ademas** encaja por edad, contrato y
+precio. Es la pregunta con la que trabaja de verdad una direccion deportiva, y
+la que separa una herramienta de consulta de una de scouting: no *quien es
+bueno*, sino *a quien puedo ir a buscar*.
+
+El filtro de contrato es el mas practico. Un jugador con ano y medio por delante
+y un percentil alto es una operacion cara; el mismo jugador a seis meses del
+final es otra conversacion.
+
+> **El valor de mercado no mide calidad.** Incorpora edad, contrato restante,
+> tamano del club y nacionalidad, asi que un jugador "barato" para su percentil
+> puede serlo por razones legitimas. El filtro esta para acotar por presupuesto,
+> no para detectar gangas.
+
+### Forma dentro de la temporada
+
+Con datos agregados solo se puede responder *como va la temporada*. Con datos
+por partido se responde tambien *como esta ahora*, que es otra pregunta: un
+delantero con seis goles en veinte partidos y otro con seis en los ultimos
+cuatro tienen el mismo numero y no estan en el mismo momento.
+
+Se dibuja el **acumulado de goles frente a xG** y no una media movil. Con cuatro
+o cinco jornadas, una media movil de tres partidos es el dato bruto con otro
+nombre y sugiere una tendencia donde solo hay ruido; la curva acumulada no
+promete tendencia, solo ensena como se ha llegado hasta aqui. Y ahi se ve lo que
+ninguna cifra de temporada dice: si un sobrerrendimiento viene de un partido
+suelto o de todos.
+
+La forma reciente se compara con **su propia media**, no con la liga: decir que
+esta en el percentil 80 de las ultimas jornadas mezcla lo bueno que es con lo
+bien que esta.
+
 ### Mapa de tiros
 
 Desde donde tira un jugador y con que calidad. Es lo que ningun agregado

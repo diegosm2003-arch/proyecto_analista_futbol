@@ -130,6 +130,15 @@ class ApiClient:
             ruta, params={"season": season, "team": team, "basis": basis, "limit": limit}
         )
 
+    def scouting(self, **filtros: object) -> dict[str, Any]:
+        """Buscador de scouting: percentil alto mas edad, contrato y precio."""
+        return self._get("/players/scouting", params=filtros)
+
+    def player_form(self, player: str, season: str, team: str | None = None) -> dict[str, Any]:
+        """Trayectoria y forma reciente de un jugador."""
+        ruta = f"/players/{quote(player, safe='')}/form"
+        return self._get(ruta, params={"season": season, "team": team})
+
     def player_shots(self, player: str, season: str, team: str | None = None) -> dict[str, Any]:
         """Mapa de tiros de un jugador."""
         ruta = f"/players/{quote(player, safe='')}/shots"

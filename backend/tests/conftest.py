@@ -109,6 +109,12 @@ class FakeDataAccess:
     def shots_conceded(self, season: str, team: str) -> list[dict]:
         return []
 
+    def matches(self, season: str, understat_id: str) -> pd.DataFrame:
+        return pd.DataFrame()
+
+    def market_context(self, season: str) -> pd.DataFrame:
+        return pd.DataFrame()
+
 
 LIGAS = [
     "ESP-La Liga",

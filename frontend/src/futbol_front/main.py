@@ -17,7 +17,7 @@ import streamlit as st
 from futbol_front import branding, enlaces
 from futbol_front.client import ApiError
 from futbol_front.state import cached_health
-from futbol_front.views import home, players, teams
+from futbol_front.views import home, players, scouting, teams
 
 st.set_page_config(
     page_title="Fútbol Analytics",
@@ -29,6 +29,7 @@ st.set_page_config(
 VISTAS = {
     home.JUGADORES: ("Jugadores", players.render),
     home.EQUIPOS: ("Equipos", teams.render),
+    home.SCOUTING: ("Scouting", scouting.render),
 }
 
 
@@ -45,7 +46,7 @@ def _cabecera(destino: str) -> None:
     suelto a la derecha, en el sitio donde suelen estar las acciones destructivas
     y la configuracion.
     """
-    logo, marca, ambito, compartir = st.columns([1, 5, 4, 2], vertical_alignment="center")
+    logo, marca, ambito, compartir = st.columns([1, 4, 5, 2], vertical_alignment="center")
 
     with logo:
         st.markdown(

@@ -24,6 +24,7 @@ from futbol_front import charts, presentation
 from futbol_front.client import ApiError
 from futbol_front.state import (
     cached_catalog,
+    cached_form,
     cached_market,
     cached_profile,
     cached_search,
@@ -143,14 +144,16 @@ def render() -> None:
         _comparacion(perfil, perfil_rival, plantillas, paleta)
         return
 
-    rendimiento, tiros, mercado, plantel = st.tabs(
-        ["Rendimiento", "Tiros", "Mercado y carrera", "Plantilla"]
+    rendimiento, tiros, forma, mercado, plantel = st.tabs(
+        ["Rendimiento", "Tiros", "Forma", "Mercado y carrera", "Plantilla"]
     )
     with rendimiento:
         _perfil(perfil, plantillas, paleta)
         _similares(perfil, base, paleta)
     with tiros:
         _tiros(perfil["player"], paleta)
+    with forma:
+        _forma(perfil["player"], paleta)
     with mercado:
         _mercado(perfil["player"])
     with plantel:
@@ -652,6 +655,80 @@ def _mayor_diferencia(datos, nombre_a: str, nombre_b: str) -> None:
         f"encima de {peor} ({max(a, b)} frente a {min(a, b)}).</div></div>",
         unsafe_allow_html=True,
     )
+
+
+def _forma(ficha: dict, paleta: Palette) -> None:
+    """Cómo está ahora, que no es lo mismo que cómo va la temporada.
+
+    Un delantero con seis goles en veinte partidos y otro con seis en los
+    últimos cuatro tienen el mismo número y no están en el mismo momento.
+    """
+    try:
+        datos = cached_form(ficha["player"], ficha["season"], ficha["team"])
+    except ApiError as error:
+        st.error(str(error))
+        return
+
+    for aviso in datos["caveats"]:
+        st.warning(aviso, icon=":material/info:")
+    if not datos["matches"]:
+        return
+
+    grafico, panel = st.columns([3, 2], gap="large")
+
+    with grafico:
+        figura = charts.cumulative_goals(
+            datos["matches"], f"{ficha['player']} · goles frente a xG", paleta
+        )
+        st.pyplot(figura, width="content")
+
+    with panel:
+        columnas = st.columns(2)
+        columnas[0].metric(
+            "xG/90 en la temporada",
+            f"{datos['season_xg90']:.2f}" if datos["season_xg90"] else "-",
+        )
+        # Se compara con SU media y no con la liga: el percentil mezcla lo bueno
+        # que es con lo bien que está, y aquí solo interesa lo segundo.
+        columnas[1].metric(
+            f"Últimos {datos['recent_matches']}",
+            f"{datos['recent_xg90']:.2f}" if datos["recent_xg90"] else "-",
+            delta=f"{datos['delta_xg90']:+.2f}" if datos["delta_xg90"] is not None else None,
+        )
+
+        acumulado = datos["matches"][-1]
+        diferencia = acumulado["cumulative_goals"] - acumulado["cumulative_xg"]
+        st.markdown(
+            '<div class="panel-detalle">'
+            '<div class="titulo">Acumulado de la temporada</div>'
+            f'<div class="valor">{acumulado["cumulative_goals"]} goles para '
+            f"{acumulado['cumulative_xg']:.2f} de xG</div></div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            f"Marca {abs(diferencia):.1f} "
+            f"{'por encima' if diferencia >= 0 else 'por debajo'} de lo esperado. "
+            "Mira si las dos líneas se separan de golpe en un partido o poco a poco "
+            "en todos: lo primero es un día bueno, lo segundo empieza a ser un rasgo."
+        )
+
+    with st.expander(f"Partido a partido ({datos['played']})"):
+        st.dataframe(
+            [
+                {
+                    "Partido": m["match_label"],
+                    "Posición": m["position"],
+                    "Minutos": m["minutes"],
+                    "Goles": m["goals"],
+                    "xG": round(m["xg"], 2),
+                    "Asistencias": m["assists"],
+                    "xA": round(m["xa"], 2),
+                }
+                for m in reversed(datos["matches"])
+            ],
+            hide_index=True,
+            width="stretch",
+        )
 
 
 # --- Mercado ----------------------------------------------------------------

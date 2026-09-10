@@ -129,6 +129,20 @@ def cached_squad(team: str, season: str, league: str) -> list[dict[str, Any]]:
     return _squad(data_version(), team, season, league)
 
 
+def cached_metrics() -> list[dict[str, Any]]:
+    return _metrics(data_version())
+
+
+def cached_scouting(**filtros: object) -> dict[str, Any]:
+    # Los filtros se ordenan para que dos busquedas iguales compartan clave
+    # de cache aunque los argumentos lleguen en otro orden.
+    return _scouting(data_version(), tuple(sorted(filtros.items(), key=str)))
+
+
+def cached_form(player: str, season: str, team: str | None) -> dict[str, Any]:
+    return _form(data_version(), player, season, team)
+
+
 def cached_shots(player: str, season: str, team: str | None) -> dict[str, Any]:
     return _shots(data_version(), player, season, team)
 
@@ -224,3 +238,18 @@ def _shots(version: str, player: str, season: str, team: str | None) -> dict[str
 @st.cache_data(ttl=TTL_SECONDS)
 def _conceded(version: str, team: str, season: str) -> dict[str, Any]:
     return get_client().shots_conceded(team=team, season=season)
+
+
+@st.cache_data(ttl=TTL_SECONDS)
+def _form(version: str, player: str, season: str, team: str | None) -> dict[str, Any]:
+    return get_client().player_form(player=player, season=season, team=team)
+
+
+@st.cache_data(ttl=TTL_SECONDS)
+def _metrics(version: str) -> list[dict[str, Any]]:
+    return get_client().metrics()
+
+
+@st.cache_data(ttl=TTL_SECONDS)
+def _scouting(version: str, filtros: tuple) -> dict[str, Any]:
+    return get_client().scouting(**dict(filtros))

@@ -41,8 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--only",
-        choices=("players", "teams", "shots"),
-        help="Cargar solo jugadores, equipos o tiros. Por defecto, los tres.",
+        choices=("players", "teams", "shots", "matches"),
+        help="Cargar solo una parte: jugadores, equipos, tiros o partidos.",
     )
     parser.add_argument(
         "--dry-run",
@@ -95,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
             load_players=args.only in (None, "players"),
             load_teams=args.only in (None, "teams"),
             load_shots=args.only in (None, "shots"),
+            load_matches=args.only in (None, "matches"),
             dry_run=args.dry_run,
             use_cache=args.use_cache,
         )

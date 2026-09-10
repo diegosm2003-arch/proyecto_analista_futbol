@@ -125,6 +125,38 @@ def read_shot_events(
     return frame
 
 
+def read_player_match_stats(
+    leagues: list[str] | None = None,
+    seasons: list[str] | None = None,
+) -> pd.DataFrame:
+    """Estadisticas de cada jugador en cada partido.
+
+    Resuelve la limitacion estructural del proyecto: con datos agregados por
+    temporada no hay evolucion posible, porque dos temporadas son dos puntos y
+    dos puntos no son una tendencia. Por jornada si la hay, y ademas permite
+    distinguir dos preguntas que no son la misma: como va la temporada y como
+    esta ahora.
+
+    Trae tambien la posicion que jugo cada dia, que no es la de la temporada:
+    con eso se ven los cambios de rol tras un cambio de entrenador.
+    """
+    settings = get_settings()
+    ligas = supported(leagues or settings.leagues)
+    temporadas = seasons or settings.seasons
+
+    if not ligas:
+        logger.warning("Ninguna liga pedida esta en Understat")
+        return pd.DataFrame()
+
+    logger.info(
+        "Descargando partidos de Understat",
+        extra={"ligas": ligas, "temporadas": temporadas},
+    )
+    frame = _understat(ligas, temporadas).read_player_match_stats()
+    logger.info("Partidos descargados", extra={"filas": len(frame)})
+    return frame
+
+
 def read_team_season_stats(
     leagues: list[str] | None = None,
     seasons: list[str] | None = None,
