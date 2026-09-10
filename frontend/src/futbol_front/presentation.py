@@ -63,7 +63,7 @@ def prepare_pizza(profile: dict[str, Any], template: list[dict[str, Any]]) -> Pi
         categorias.append(porcion["category"])
 
     if ausentes:
-        logger.info("Metricas sin percentil en el perfil", extra={"metricas": ausentes})
+        logger.info("Métricas sin percentil en el perfil", extra={"métricas": ausentes})
 
     return PizzaData(labels=etiquetas, values=valores, categories=categorias, missing=ausentes)
 
@@ -128,7 +128,7 @@ def _percentil(valor: float, metrica: str) -> int:
     """Redondea a entero y recorta al rango valido."""
     entero = int(round(valor))
     if entero < MIN_PERCENTILE or entero > MAX_PERCENTILE:
-        logger.warning("Percentil fuera de rango", extra={"metrica": metrica, "valor": valor})
+        logger.warning("Percentil fuera de rango", extra={"métrica": metrica, "valor": valor})
     return max(MIN_PERCENTILE, min(MAX_PERCENTILE, entero))
 
 
@@ -192,7 +192,7 @@ def summarise_profile(profile: dict[str, Any]) -> str:
         if metrica.get("higher_is_better") is True and metrica.get("percentile") is not None
     ]
     if not con_direccion:
-        return "Sin metricas suficientes para resumir el perfil."
+        return "Sin métricas suficientes para resumir el perfil."
 
     mejores = sorted(con_direccion, key=lambda m: m["percentile"], reverse=True)[:2]
     partes = [f"{m['label'].lower()} (percentil {int(round(m['percentile']))})" for m in mejores]
@@ -235,7 +235,7 @@ def extreme_metrics(
     high: int = HIGH_PERCENTILE,
     low: int = LOW_PERCENTILE,
 ) -> list[Alert]:
-    """Metricas en las que el jugador se sale de lo normal, con su lectura.
+    """Métricas en las que el jugador se sale de lo normal, con su lectura.
 
     Un pizza chart con doce ejes ensena mucho a la vez y no dice donde mirar.
     Esto responde a la pregunta que se hace un analista delante del grafico: que
@@ -297,11 +297,11 @@ def _nota(metrica: dict[str, Any], poblacion_fragil: bool) -> str:
     notas = []
     if metrica.get("team_dependent"):
         notas.append(
-            "cuenta posesiones, asi que premia jugar en un equipo dominante: "
+            "cuenta posesiones, así que premia jugar en un equipo dominante: "
             "mide al conjunto tanto como al jugador"
         )
     if poblacion_fragil:
-        notas.append("la poblacion de comparacion es pequena y el percentil se mueve facil")
+        notas.append("la población de comparación es pequeña y el percentil se mueve fácil")
     return "; ".join(notas)
 
 
@@ -335,6 +335,8 @@ def chart_filename(*partes: str, extension: str = "png") -> str:
     'nico-williams-2627-per90.png'
     """
     limpias = [_slug(parte) for parte in partes if _slug(parte)]
+    # Sin tilde a proposito: este valor NO pasa por `_slug`, asi que una tilde
+    # aqui produciria justo el nombre de fichero que esta funcion evita.
     nombre = "-".join(limpias) or "grafico"
     return f"{nombre}.{extension}"
 

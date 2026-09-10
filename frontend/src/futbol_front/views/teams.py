@@ -32,7 +32,7 @@ def render() -> None:
     if not catalogo["seasons"]:
         apply(None)
         st.warning(
-            "No hay datos cargados todavia. Lanza el ETL: "
+            "No hay datos cargados todavía. Lanza el ETL: "
             "`docker compose --profile etl run --rm etl`"
         )
         return
@@ -45,7 +45,7 @@ def render() -> None:
         browse.selector_de_liga(catalogo["leagues"], "Elige una liga")
         st.divider()
         st.caption(
-            "Tambien puedes ver las cinco a la vez: el clustering se calcula siempre "
+            "También puedes ver las cinco a la vez: el clustering se calcula siempre "
             "sobre todas y la liga solo filtra a quien se pinta."
         )
         st.button(
@@ -99,11 +99,11 @@ def _filtros(catalogo: dict) -> tuple[str, int]:
                 format_func=presentation.season_label,
             )
         with estilos_c:
-            n_estilos = st.slider("Numero de estilos", min_value=2, max_value=16, value=6)
+            n_estilos = st.slider("Número de estilos", min_value=2, max_value=16, value=6)
         st.caption(
             "Los equipos se agrupan por como juegan, no por lo bien que juegan. Los estilos "
-            "no estan definidos de antemano: cada grupo se describe por sus rasgos mas "
-            "extremos. El clustering usa todas las ligas y el filtro se aplica despues."
+            "no están definidos de antemano: cada grupo se describe por sus rasgos más "
+            "extremos. El clustering usa todas las ligas y el filtro se aplica después."
         )
     return temporada, n_estilos
 
@@ -127,15 +127,15 @@ def _panel(informe: dict) -> None:
         resto = " y otros" if len(nombres) > 6 else ""
         st.markdown(
             '<div class="panel-detalle">'
-            f'<div class="titulo">{estilo} &middot; {len(nombres)} equipos</div>'
+            f'<div class="título">{estilo} &middot; {len(nombres)} equipos</div>'
             f'<div class="valor">{visibles}{resto}</div></div>',
             unsafe_allow_html=True,
         )
 
     with st.popover("Como leer el mapa", width="stretch"):
         st.markdown(
-            "El eje vertical esta **invertido**: una PPDA baja significa presion alta, "
-            "asi que los equipos mas agresivos quedan arriba."
+            "El eje vertical esta **invertido**: una PPDA baja significa presión alta, "
+            "así que los equipos más agresivos quedan arriba."
         )
         st.markdown(
             "La **PPDA es aproximada**: se calcula sobre todo el campo porque la fuente "
@@ -150,7 +150,7 @@ def _calidad(informe: dict) -> None:
         return
     if silueta < WEAK_SILHOUETTE:
         st.info(
-            f"Separacion debil entre estilos (silhouette {silueta:.2f}). No es un "
+            f"Separación debil entre estilos (silhouette {silueta:.2f}). No es un "
             "error: los estilos de juego son un continuo y no grupos nitidos. "
             "Prueba con menos estilos.",
             icon=":material/info:",
@@ -160,7 +160,7 @@ def _calidad(informe: dict) -> None:
 def _mapa(informe: dict, temporada: str, paleta: Palette) -> None:
     datos = presentation.prepare_style_map(informe)
     if not len(datos):
-        st.info("Ningun equipo tiene territorio y presion calculables.")
+        st.info("Ningun equipo tiene territorio y presión calculables.")
         return
 
     figura = charts.style_map(

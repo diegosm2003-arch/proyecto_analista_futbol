@@ -27,6 +27,7 @@ from futbol_front.state import (
     cached_market,
     cached_profile,
     cached_search,
+    cached_shots,
     cached_similar,
     cached_squad,
     cached_teams,
@@ -35,14 +36,19 @@ from futbol_front.state import (
 from futbol_front.theme import Palette, apply
 from futbol_front.views import browse
 
-BASES = {
-    "Por 90 minutos": "per90",
-    "Ajustado por posesion": "padj",
-}
+# Base de comparacion. Solo hay una porque el ajuste por posesion no tiene hoy
+# ninguna metrica a la que aplicarse: divide por el tiempo SIN balon, que es la
+# correccion de una metrica defensiva, y el catalogo de Understat no trae
+# ninguna. Ofrecerlo devolvia un perfil con once metricas y cero percentiles, o
+# sea una pantalla en blanco.
+#
+# La maquinaria sigue en el backend, probada y lista: el dia que entren metricas
+# defensivas, aqui vuelve el conmutador.
+BASE_POR_90 = "per90"
 
 POBLACIONES = {
-    "Su posicion (DF, MF, FW)": "position",
-    "Su rol (mas fino, muestra menor)": "role",
+    "Su posición (DF, MF, FW)": "position",
+    "Su rol (más fino, muestra menor)": "role",
 }
 
 TODAS_LAS_LIGAS = "Todas las Big 5"
@@ -63,7 +69,7 @@ def render() -> None:
     if not catalogo["seasons"]:
         apply(None)
         st.warning(
-            "No hay datos cargados todavia. Lanza el ETL: "
+            "No hay datos cargados todavía. Lanza el ETL: "
             "`docker compose --profile etl run --rm etl`"
         )
         return
@@ -137,10 +143,14 @@ def render() -> None:
         _comparacion(perfil, perfil_rival, plantillas, paleta)
         return
 
-    rendimiento, mercado, plantel = st.tabs(["Rendimiento", "Mercado y carrera", "Plantilla"])
+    rendimiento, tiros, mercado, plantel = st.tabs(
+        ["Rendimiento", "Tiros", "Mercado y carrera", "Plantilla"]
+    )
     with rendimiento:
         _perfil(perfil, plantillas, paleta)
         _similares(perfil, base, paleta)
+    with tiros:
+        _tiros(perfil["player"], paleta)
     with mercado:
         _mercado(perfil["player"])
     with plantel:
@@ -182,28 +192,16 @@ def _barra_de_filtros(
                 key="temporada_activa",
             )
         with posicion_c:
-            posicion = st.selectbox("Posicion", ["Todas", "GK", "DF", "MF", "FW"])
+            posicion = st.selectbox("Posición", ["Todas", "GK", "DF", "MF", "FW"])
         with nombre_c:
             nombre = st.text_input("Nombre", placeholder="Busqueda parcial")
 
-        base_c, poblacion_c = st.columns(2)
-        with base_c:
-            base = st.radio(
-                "Normalizacion",
-                list(BASES),
-                horizontal=True,
-                help=(
-                    "El ajuste por posesion corrige que un jugador de un equipo que "
-                    "domina tiene menos ocasiones de defender."
-                ),
-            )
-        with poblacion_c:
-            poblacion = st.radio(
-                "Comparar contra",
-                list(POBLACIONES),
-                horizontal=True,
-                help="El rol es mas preciso, pero la poblacion se reduce a un cuarto.",
-            )
+        poblacion = st.radio(
+            "Comparar contra",
+            list(POBLACIONES),
+            horizontal=True,
+            help="El rol es más preciso, pero la población se reduce a un cuarto.",
+        )
 
         _aviso_de_umbral(catalogo, temporada)
 
@@ -215,7 +213,7 @@ def _barra_de_filtros(
             "position_group": None if posicion == "Todas" else posicion,
             "name": nombre or None,
         },
-        BASES[base],
+        BASE_POR_90,
         POBLACIONES[poblacion],
     )
 
@@ -231,11 +229,11 @@ def _aviso_de_umbral(catalogo: dict, temporada: str) -> None:
         st.caption(
             f":orange[Entran los jugadores con al menos **{umbral} minutos**. El umbral "
             f"ha bajado desde los {catalogo['min_minutes']} habituales porque la "
-            f"temporada acaba de empezar: con tan pocos partidos, las metricas por 90 "
+            f"temporada acaba de empezar: con tan pocos partidos, las métricas por 90 "
             f"son inestables.]"
         )
     else:
-        st.caption(f"Entran en la comparacion los jugadores con al menos {umbral} minutos.")
+        st.caption(f"Entran en la comparación los jugadores con al menos {umbral} minutos.")
 
 
 def _seleccion(jugadores: list[dict], paleta: Palette) -> tuple[dict, dict | None]:
@@ -255,7 +253,7 @@ def _seleccion(jugadores: list[dict], paleta: Palette) -> tuple[dict, dict | Non
     st.markdown(
         f'<div class="cinta-liga">{paleta.name}</div> '
         f'<span style="color:#8D9AB4;margin-left:.6rem;">{ficha["team"]} &middot; '
-        f"{ficha['position_group'] or 'sin posicion'}"
+        f"{ficha['position_group'] or 'sin posición'}"
         f"{' &middot; ' + ficha['detailed_position'] if ficha['detailed_position'] else ''}"
         f"</span>",
         unsafe_allow_html=True,
@@ -284,7 +282,7 @@ def _selector_de_comparacion(jugadores: list[dict], elegido: dict) -> dict | Non
     seleccion = st.selectbox(
         "Comparar con",
         list(etiquetas),
-        help="Solo jugadores de la misma posicion: los ejes del grafico dependen de ella.",
+        help="Solo jugadores de la misma posición: los ejes del gráfico dependen de ella.",
     )
     return etiquetas[seleccion]
 
@@ -299,8 +297,8 @@ def _perfil(perfil: dict, plantillas: list[dict], paleta: Palette) -> None:
 
     if not plantilla:
         st.info(
-            "No hay grafico definido para esta posicion. Understat no publica metricas "
-            "de portero, asi que se muestra solo la tabla."
+            "No hay gráfico definido para esta posición. Understat no publica métricas "
+            "de portero, así que se muestra solo la tabla."
         )
         _tabla(perfil)
         return
@@ -344,7 +342,7 @@ def _panel_de_lectura(perfil: dict) -> None:
                 st.caption(f"Ojo: {aviso.note}.")
     else:
         st.caption(
-            "Ninguna metrica se sale del rango habitual: es un perfil regular, sin un "
+            "Ninguna métrica se sale del rango habitual: es un perfil regular, sin un "
             "punto fuerte ni un agujero claros."
         )
 
@@ -395,13 +393,13 @@ def _similares(perfil: dict, base: str, paleta: Palette) -> None:
     vecinos = datos["neighbours"]
     if not vecinos:
         st.info(
-            "Sin comparables. Suele pasar con perfiles a los que les faltan metricas, "
+            "Sin comparables. Suele pasar con perfiles a los que les faltan métricas, "
             "o en posiciones con pocos jugadores por encima del umbral de minutos."
         )
         return
 
     st.caption(
-        f"Los mas parecidos a **{ficha['player']}** dentro de su grupo "
+        f"Los más parecidos a **{ficha['player']}** dentro de su grupo "
         f"({datos['population_group']}) en las Big 5, por su vector de percentiles."
     )
 
@@ -486,12 +484,12 @@ def _comparacion(perfil: dict, rival: dict, templates: list[dict], paleta: Palet
     ficha, ficha_rival = perfil["player"], rival["player"]
     plantilla = _plantilla(templates, ficha["position_group"])
     if not plantilla:
-        st.info("Esta posicion no tiene grafico definido.")
+        st.info("Esta posición no tiene gráfico definido.")
         return
 
     datos = presentation.prepare_comparison(perfil, rival, plantilla)
     if not len(datos):
-        st.info("Los dos jugadores no comparten metricas con percentil.")
+        st.info("Los dos jugadores no comparten métricas con percentil.")
         return
 
     grafico, panel = st.columns([3, 2], gap="large")
@@ -525,6 +523,86 @@ def _comparacion(perfil: dict, rival: dict, templates: list[dict], paleta: Palet
                     st.warning(aviso, icon=":material/info:")
 
 
+def _tiros(ficha: dict, paleta: Palette) -> None:
+    """Desde dónde tira y con qué calidad.
+
+    Es lo que ningún agregado responde: un mismo npxG por 90 puede venir de tres
+    remates claros o de quince disparos lejanos, y para un scout no son el mismo
+    futbolista.
+    """
+    try:
+        datos = cached_shots(ficha["player"], ficha["season"], ficha["team"])
+    except ApiError as error:
+        st.error(str(error))
+        return
+
+    for aviso in datos["caveats"]:
+        st.warning(aviso, icon=":material/info:")
+    if not datos["shots"]:
+        return
+
+    campo, panel = st.columns([2, 3], gap="large")
+
+    with campo:
+        figura = charts.shot_map(datos["shots"], f"{ficha['player']} · {ficha['team']}", paleta)
+        st.pyplot(figura, width="content")
+
+    with panel:
+        columnas = st.columns(3)
+        columnas[0].metric("Remates", len(datos["shots"]))
+        columnas[1].metric("Goles", datos["goals"])
+        columnas[2].metric(
+            "xG por tiro",
+            f"{datos['xg_per_shot']:.3f}" if datos["xg_per_shot"] else "-",
+        )
+
+        # El npxG separa lo que genera jugando de lo que le regalan desde los
+        # once metros: con 0,76 de xG cada uno, dos penaltis desplazan la media
+        # de calidad de cualquier delantero.
+        st.markdown(
+            '<div class="panel-detalle">'
+            '<div class="titulo">xG acumulado</div>'
+            f'<div class="valor">{datos["total_xg"]:.2f} en total · '
+            f"{datos['np_xg']:.2f} sin penaltis</div></div>",
+            unsafe_allow_html=True,
+        )
+
+        _reparto_de_tiros(datos["shots"])
+
+        diferencia = datos["goals"] - datos["np_xg"]
+        st.caption(
+            f"Marca {abs(diferencia):.1f} goles "
+            f"{'por encima' if diferencia >= 0 else 'por debajo'} de lo que dicen sus "
+            "ocasiones. Esa diferencia se corrige sola en cuanto hay partidos: describe "
+            "una racha, no una habilidad."
+        )
+
+
+def _reparto_de_tiros(tiros: list[dict]) -> None:
+    """De qué situación nacen sus remates.
+
+    Distingue al delantero que vive del juego del que vive del balón parado, que
+    es una diferencia de perfil que el xG total esconde.
+    """
+    conteo: dict[str, list[float]] = {}
+    for tiro in tiros:
+        conteo.setdefault(tiro["situation"] or "Sin clasificar", []).append(tiro["xg"] or 0.0)
+
+    st.markdown("###### De dónde nacen sus remates")
+    st.dataframe(
+        [
+            {
+                "Situación": situacion,
+                "Remates": len(valores),
+                "xG medio": round(sum(valores) / len(valores), 3),
+            }
+            for situacion, valores in sorted(conteo.items(), key=lambda x: len(x[1]), reverse=True)
+        ],
+        hide_index=True,
+        width="stretch",
+    )
+
+
 # --- Mercado ----------------------------------------------------------------
 
 
@@ -549,7 +627,7 @@ def _mercado(ficha: dict) -> None:
     if tarjeta:
         columnas = st.columns(4)
         columnas[0].metric("Edad", tarjeta["age"] if tarjeta["age"] is not None else "-")
-        columnas[1].metric("Posicion", tarjeta["position"] or "-")
+        columnas[1].metric("Posición", tarjeta["position"] or "-")
         columnas[2].metric("Pie", (tarjeta["foot"] or "-").capitalize())
         columnas[3].metric("Contrato", tarjeta["contract_until"] or "-")
         procedencia = tarjeta.get("signed_from")
@@ -561,7 +639,7 @@ def _mercado(ficha: dict) -> None:
         columnas = st.columns(2)
         columnas[0].metric("Valor actual", _millones(actual))
         columnas[1].metric(
-            "Maximo historico",
+            "Máximo histórico",
             _millones(maximo),
             delta=_millones(actual - maximo) if maximo and actual != maximo else None,
         )
@@ -580,7 +658,7 @@ def _mercado(ficha: dict) -> None:
                 {"Millones de euros": [(v["market_value_eur"] or 0) / 1e6 for v in tasaciones]},
                 index=pd.to_datetime([v["valuation_date"] for v in tasaciones]),
             )
-            serie.index.name = "Fecha de tasacion"
+            serie.index.name = "Fecha de tasación"
             # La curva dice mas que la cifra: distingue al canterano en subida
             # del veterano en caida, aunque hoy valgan lo mismo.
             st.line_chart(serie, height=260)
@@ -657,20 +735,20 @@ def _plantel(temporada: str, liga: str, equipo: str, paleta: Palette) -> None:
         veteranos = [j for j in con_datos if j[1] >= 30]
         st.markdown(
             '<div class="panel-detalle">'
-            '<div class="titulo">Reparto por edad</div>'
+            '<div class="título">Reparto por edad</div>'
             f'<div class="valor">{len(jovenes)} de 23 o menos &middot; '
-            f"{len(veteranos)} de 30 o mas</div></div>",
+            f"{len(veteranos)} de 30 o más</div></div>",
             unsafe_allow_html=True,
         )
         peso_joven = sum(v for _, e, v in con_datos if e <= 23) / sum(valores) * 100
         st.markdown(
             '<div class="panel-detalle">'
-            '<div class="titulo">Patrimonio en menores de 24</div>'
+            '<div class="título">Patrimonio en menores de 24</div>'
             f'<div class="valor">{peso_joven:.0f} % del valor de la plantilla</div></div>',
             unsafe_allow_html=True,
         )
         st.caption(
-            "Un valor alto aqui suele significar que el club aun puede revalorizar; "
+            "Un valor alto aquí suele significar que el club aun puede revalorizar; "
             "uno bajo, que su patrimonio ya solo puede depreciarse."
         )
 
@@ -680,7 +758,7 @@ def _plantel(temporada: str, liga: str, equipo: str, paleta: Palette) -> None:
                 {
                     "Jugador": j["player"],
                     "Edad": j["age"],
-                    "Posicion": j["position"],
+                    "Posición": j["position"],
                     "Valor": _millones(j["market_value_eur"]),
                 }
                 for j in sorted(jugadores, key=lambda x: x["market_value_eur"] or 0, reverse=True)
@@ -705,7 +783,7 @@ def _descargar(figura, jugador: str, temporada: str, base: str) -> None:
 
 def _descargar_figura(figura, nombre: str) -> None:
     st.download_button(
-        "Descargar grafico (PNG)",
+        "Descargar gráfico (PNG)",
         data=charts.to_png(figura),
         file_name=nombre,
         mime="image/png",
@@ -723,10 +801,9 @@ def _plantilla(templates: list[dict], position_group: str | None) -> list[dict]:
 
 def _subtitulo(perfil: dict) -> str:
     ficha = perfil["player"]
-    rol = ficha["detailed_position"] or ficha["position_group"] or "sin posicion"
-    base = "por 90 min" if perfil["basis"] == "per90" else "ajustado por posesion"
+    rol = ficha["detailed_position"] or ficha["position_group"] or "sin posición"
     return (
-        f"{rol} | {presentation.season_label(ficha['season'])} | {base} | "
+        f"{rol} | {presentation.season_label(ficha['season'])} | por 90 min | "
         f"percentil frente a {perfil['population_size']} jugadores"
     )
 
@@ -739,17 +816,16 @@ def _detalle(perfil: dict) -> None:
 
     filas = filas.rename(
         columns={
-            "label": "Metrica",
+            "label": "Métrica",
             "total": "Total",
             "per90": "Por 90",
-            "padj": "Ajustado",
             "percentile": "Percentil",
         }
     )
-    columnas = [c for c in ("Metrica", "Total", "Por 90", "Ajustado", "Percentil") if c in filas]
+    columnas = [c for c in ("Métrica", "Total", "Por 90", "Percentil") if c in filas]
 
     st.caption(
-        "Las metricas sin direccion (las tarjetas, los tiros) tienen percentil pero no "
+        "Las métricas sin dirección (las tarjetas, los tiros) tienen percentil pero no "
         "significan mejor ni peor: describen como juega."
     )
     st.dataframe(filas[columnas].round(2), hide_index=True, width="stretch")

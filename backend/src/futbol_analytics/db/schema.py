@@ -131,6 +131,48 @@ team_season = Table(
 
 # Trazabilidad de las cargas: sin esto, un dato raro en la interfaz no se puede
 # atribuir a una ejecucion concreta del ETL.
+shot_event = Table(
+    "shot_event",
+    metadata,
+    # El identificador de tiro de Understat es unico en toda la fuente, asi que
+    # sirve de clave por si solo y hace la recarga idempotente sin componer una
+    # clave artificial de partido, minuto y jugador.
+    Column("shot_id", Text, primary_key=True),
+    Column("league", Text, nullable=False),
+    Column("season", Text, nullable=False),
+    Column("game_id", Text, nullable=True),
+    Column("match_date", Date, nullable=True),
+    Column("team", Text, nullable=False),
+    Column("player", Text, nullable=False),
+    # El mismo identificador que ya usa `player_season`: los tiros se unen a un
+    # jugador sin volver a cruzar por nombre.
+    Column("understat_id", Text, nullable=True, index=True),
+    Column("minute", Integer, nullable=True),
+    Column("xg", Float, nullable=True, comment="xG de ESTE tiro, no acumulado"),
+    Column(
+        "location_x",
+        Float,
+        nullable=True,
+        comment="0 a 1 desde la porteria propia; 1 es la linea de gol rival",
+    ),
+    Column("location_y", Float, nullable=True, comment="0 a 1 de banda a banda"),
+    Column("body_part", Text, nullable=True),
+    Column(
+        "situation",
+        Text,
+        nullable=True,
+        comment="Open Play, From Corner, Set Piece o Direct Freekick",
+    ),
+    Column("result", Text, nullable=True, comment="Goal, Saved Shot, Missed Shot..."),
+    Column("assist_player", Text, nullable=True),
+    Column("scraped_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Index("ix_shot_event_temporada", "league", "season"),
+    comment=(
+        "Un tiro por fila, con coordenadas y xG propio. Es lo que separa 'este jugador "
+        "genera 0,35 npxG por 90' de 'desde donde tira y con que calidad'."
+    ),
+)
+
 etl_run = Table(
     "etl_run",
     metadata,

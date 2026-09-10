@@ -21,6 +21,8 @@ from futbol_analytics.api.schemas import (
     PlayerSummary,
     Population,
     PositionGroup,
+    Shot,
+    ShotMap,
     SimilarPlayer,
     SimilarPlayers,
     Transfer,
@@ -111,7 +113,7 @@ def profile(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"{player!r} tiene {len(equipos)} etapas en {season!r} ({', '.join(equipos)}). "
-                "Indica el equipo: sus numeros en cada club son hechos distintos."
+                "Indica el equipo: sus números en cada club son hechos distintos."
             ),
         )
 
@@ -133,7 +135,7 @@ def profile(
         # solo se calcula entre jugadores con posesion conocida, asi que si falta
         # no hay ajuste que mostrar.
         avisos.append(
-            "No hay posesion de equipo para esta liga: el ajuste por posesion no "
+            "No hay posesión de equipo para esta liga: el ajuste por posesión no "
             "esta disponible. Usa basis=per90."
         )
 
@@ -209,7 +211,7 @@ def market(
             valuations=[],
             transfers=[],
             caveats=[
-                "Este jugador no tiene identificador de Understat, asi que no se ha "
+                "Este jugador no tiene identificador de Understat, así que no se ha "
                 "podido cruzar con Transfermarkt."
             ],
         )
@@ -222,12 +224,12 @@ def market(
     if not tasaciones:
         avisos.append(
             "Sin valor de mercado cargado. El cruce con Transfermarkt puede estar "
-            "pendiente de revision, o la carga aun no ha llegado a este jugador."
+            "pendiente de revisión, o la carga aún no ha llegado a este jugador."
         )
     if tasaciones and valores and valores[-1] < max(valores):
         # Dato con lectura futbolistica: no es un fallo, es una carrera.
         avisos.append(
-            f"Su valor actual esta por debajo de su maximo "
+            f"Su valor actual está por debajo de su máximo "
             f"({max(valores) / 1e6:.0f} M EUR). Suele indicar edad, lesiones o menos minutos."
         )
 
@@ -296,13 +298,13 @@ def similar(
 
     vecinos = resultado.neighbours
     avisos = [
-        "El parecido solo abarca lo que mide el catalogo, que hoy son metricas de "
-        "ataque: dos defensas parecidos lo son con balon, no defendiendo."
+        "El parecido solo abarca lo que mide el catalogo, que hoy son métricas de "
+        "ataque: dos defensas parecidos lo son con balón, no defendiendo."
     ]
     if not vecinos:
         avisos.append(
             "Sin jugadores comparables. Suele pasar con perfiles a los que les faltan "
-            "metricas, o en posiciones con pocos jugadores por encima del umbral."
+            "métricas, o en posiciones con pocos jugadores por encima del umbral."
         )
 
     return SimilarPlayers(
@@ -323,6 +325,65 @@ def similar(
             )
             for v in vecinos
         ],
+        caveats=avisos,
+    )
+
+
+@router.get("/{player}/shots", summary="Mapa de tiros de un jugador")
+def shots(
+    player: str,
+    season: str,
+    data: DataAccessDep,
+    team: str | None = Query(default=None, description="Necesario si cambió de equipo"),
+) -> ShotMap:
+    """Desde donde tira un jugador y con qué calidad.
+
+    Es lo que separa "genera 0,35 npxG por 90" de "tira mucho desde fuera del
+    área". Un mismo npxG por 90 puede venir de tres remates claros o de quince
+    disparos lejanos, y para un scout no son el mismo futbolista.
+
+    Los penaltis se cuentan aparte: con un xG de 0,76 cada uno, dos penaltis
+    desplazan la media de calidad de cualquier delantero.
+    """
+    jugadores = services.enriched_players(data, season)
+    fila = jugadores[(jugadores["player"] == player) & (jugadores["season"] == season)]
+    if team:
+        fila = fila[fila["team"] == team]
+    if fila.empty:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{player!r} no aparece en la temporada {season!r}.",
+        )
+
+    resumen = _summary(fila.iloc[0])
+    understat_id = fila.iloc[0].get("understat_id")
+    crudos = (
+        data.shots(season, str(understat_id)) if understat_id and not pd.isna(understat_id) else []
+    )
+
+    tiros = [Shot(**_solo(t, Shot)) for t in crudos]
+    sin_penalti = [t for t in tiros if t.situation != "Penalty"]
+    xg_sin_penalti = sum(t.xg or 0.0 for t in sin_penalti)
+
+    avisos = []
+    if not tiros:
+        avisos.append(
+            "Sin tiros cargados para este jugador. Lanza el ETL con `--only shots`, "
+            "o puede que no haya rematado todavía."
+        )
+    elif len(sin_penalti) < 10:
+        avisos.append(
+            f"Solo {len(sin_penalti)} tiros sin penalti: la calidad media de ocasión "
+            "con tan pocos remates se mueve mucho de una jornada a otra."
+        )
+
+    return ShotMap(
+        player=resumen,
+        shots=tiros,
+        total_xg=round(sum(t.xg or 0.0 for t in tiros), 3),
+        np_xg=round(xg_sin_penalti, 3),
+        goals=sum(1 for t in tiros if t.result == "Goal"),
+        xg_per_shot=(round(xg_sin_penalti / len(sin_penalti), 3) if sin_penalti else None),
         caveats=avisos,
     )
 
@@ -405,9 +466,9 @@ def _caveats(
         # Big 5. Con una liga cargada, un lateral se compara contra 80 laterales
         # en lugar de contra 400.
         avisos.append(
-            f"La poblacion solo incluye {contexto['leagues']} de las "
-            f"{EXPECTED_LEAGUES} grandes ligas: el percentil es menos solido de "
-            "lo que el diseno pretende. Carga las Big 5 de esta temporada."
+            f"La población solo incluye {contexto['leagues']} de las "
+            f"{EXPECTED_LEAGUES} grandes ligas: el percentil es menos sólido de "
+            "lo que el diseño pretende. Carga las Big 5 de esta temporada."
         )
     if contexto["min_minutes"] < contexto["configured_min_minutes"]:
         # Pasa en las primeras jornadas: el umbral baja para que la plataforma
@@ -415,15 +476,15 @@ def _caveats(
         avisos.append(
             f"Temporada empezada: el umbral ha bajado a {contexto['min_minutes']} minutos "
             f"(configurado: {contexto['configured_min_minutes']}). Con tan pocos partidos, "
-            "las metricas por 90 son muy inestables."
+            "las métricas por 90 son muy inestables."
         )
     if tamano and tamano < FRAGILE_POPULATION:
         avisos.append(
-            f"La poblacion de comparacion son solo {tamano} jugadores: el percentil es fragil."
+            f"La población de comparación son solo {tamano} jugadores: el percentil es frágil."
         )
     if population == "position" and ficha.position_group == "DF":
         avisos.append(
-            "El grupo DF mezcla centrales y laterales. Para una comparacion mas fina, "
+            "El grupo DF mezcla centrales y laterales. Para una comparación más fina, "
             "pide population=role."
         )
     if ficha.detailed_position is None and ficha.position_group != "GK":

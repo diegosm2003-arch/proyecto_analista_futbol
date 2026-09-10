@@ -130,6 +130,11 @@ class ApiClient:
             ruta, params={"season": season, "team": team, "basis": basis, "limit": limit}
         )
 
+    def player_shots(self, player: str, season: str, team: str | None = None) -> dict[str, Any]:
+        """Mapa de tiros de un jugador."""
+        ruta = f"/players/{quote(player, safe='')}/shots"
+        return self._get(ruta, params={"season": season, "team": team})
+
     # --- Equipos ----------------------------------------------------------
 
     def teams(self, season: str, league: str | None = None) -> list[dict[str, Any]]:

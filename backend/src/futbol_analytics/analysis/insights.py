@@ -91,7 +91,7 @@ def overperformer(players: pd.DataFrame) -> Insight | None:
     return Insight(
         topic="Acierto",
         headline=(
-            f"{mejor['player']} lleva {mejor['diferencia']:.1f} goles mas de los que "
+            f"{mejor['player']} lleva {mejor['diferencia']:.1f} goles más de los que "
             "dicen sus ocasiones"
         ),
         subject=f"{mejor['player']} ({mejor['team']})",
@@ -153,13 +153,13 @@ def young_standout(
     return Insight(
         topic="Promesas",
         headline=(
-            f"{clave[3]}, con {int(elegido['age'])} anos, ya esta en el percentil "
+            f"{clave[3]}, con {int(elegido['age'])} años, ya está en el percentil "
             f"{int(destacados[clave])} de {etiqueta.lower()}"
         ),
         subject=f"{clave[3]} ({clave[2]})",
-        detail="Comparado con los jugadores de su posicion en las cinco grandes ligas.",
+        detail="Comparado con los jugadores de su posición en las cinco grandes ligas.",
         caveat=(
-            "Un percentil alto con pocos minutos es fragil: conviene mirar cuanto ha "
+            "Un percentil alto con pocos minutos es frágil: conviene mirar cuanto ha "
             "jugado antes de sacar conclusiones."
         ),
     )
@@ -192,12 +192,12 @@ def sharpest_contrast(percentiles: pd.DataFrame, families: dict[str, list[str]])
     return Insight(
         topic="Perfiles extremos",
         headline=(
-            f"{clave[3]} es el perfil mas desequilibrado: percentil "
+            f"{clave[3]} es el perfil más desequilibrado: percentil "
             f"{int(fila.max())} en {fila.idxmax().lower()} y {int(fila.min())} en "
             f"{fila.idxmin().lower()}"
         ),
         subject=f"{clave[3]} ({clave[2]})",
-        detail="Un contraste asi describe un tipo de futbolista, no lo bueno que es.",
+        detail="Un contraste así describe un tipo de fútbolista, no lo bueno que es.",
         caveat="",
     )
 
@@ -220,10 +220,10 @@ def territorial_team(teams: pd.DataFrame) -> Insight | None:
         topic="Territorio",
         headline=(
             f"{mejor['team']} llega {mejor['por_partido']:.1f} veces por partido a zona "
-            "de remate, mas que nadie"
+            "de remate, más que nadie"
         ),
         subject=f"{mejor['team']} ({mejor['league']})",
-        detail="Pisar el area no es lo mismo que tener el balon, y separa mejor los estilos.",
+        detail="Pisar el área no es lo mismo que tener el balón, y separa mejor los estilos.",
         caveat="",
     )
 

@@ -83,7 +83,7 @@ def selector_de_liga(leagues: list[str], titulo: str) -> None:
     st.subheader(titulo)
     st.caption(
         "Los percentiles se calculan siempre contra las cinco grandes; la liga solo "
-        "filtra a quien se ensena."
+        "filtra a quien se enseña."
     )
 
     columnas = st.columns(min(len(leagues), POR_FILA), gap="medium")
@@ -112,7 +112,7 @@ def _proximas() -> None:
     anuncio y no como algo en lo que se pueda entrar y falle.
     """
     st.divider()
-    st.caption("Proximamente")
+    st.caption("Próximamente")
 
     columnas = st.columns(len(UPCOMING_LEAGUES), gap="medium")
     for columna, (nombre, logo) in zip(columnas, UPCOMING_LEAGUES, strict=False):
@@ -143,7 +143,7 @@ def selector_de_equipo(equipos: list[dict[str, Any]], titulo: str) -> None:
         st.info("No hay equipos cargados en esta liga y temporada.")
         return
 
-    st.caption(f"{len(equipos)} equipos cargados. El numero es la plantilla que tenemos.")
+    st.caption(f"{len(equipos)} equipos cargados. El número es la plantilla que tenemos.")
 
     for inicio in range(0, len(equipos), POR_FILA):
         fila = equipos[inicio : inicio + POR_FILA]

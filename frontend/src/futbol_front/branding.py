@@ -44,7 +44,7 @@ CANDIDATOS = ("logo.svg", "logo.png")
 # Hueco cuando no hay fichero. Las iniciales del proyecto sobre el acento.
 _RESERVA = (
     '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" '
-    'aria-label="Futbol Analytics">'
+    'aria-label="Fútbol Analytics">'
     '<rect width="48" height="48" rx="12" fill="currentColor" opacity="0.18"/>'
     '<text x="24" y="31" text-anchor="middle" font-size="19" font-weight="800" '
     'fill="currentColor" font-family="sans-serif">FA</text>'
@@ -104,7 +104,7 @@ def _incrustar(ruta: Path, size_px: int) -> str:
         return _envolver(_limpiar_svg(ruta.read_text(encoding="utf-8")), size_px)
 
     datos = base64.b64encode(ruta.read_bytes()).decode("ascii")
-    imagen = f'<img src="data:image/png;base64,{datos}" alt="Futbol Analytics">'
+    imagen = f'<img src="data:image/png;base64,{datos}" alt="Fútbol Analytics">'
     return _envolver(imagen, size_px)
 
 

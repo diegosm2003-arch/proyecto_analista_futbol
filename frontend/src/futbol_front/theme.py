@@ -153,7 +153,7 @@ h1 {{ font-weight: 800; }}
 /* Cifras destacadas: el valor toma el color de la liga. */
 div[data-testid="stMetricValue"] {{ color: {p.accent}; font-size: 1.35rem; }}
 
-/* Pestanas activas, tambien con el acento. */
+/* Pestanas activas, también con el acento. */
 button[data-baseweb="tab"][aria-selected="true"] {{ color: {p.accent}; }}
 div[data-baseweb="tab-highlight"] {{ background-color: {p.accent}; }}
 
@@ -166,7 +166,7 @@ div[data-baseweb="tab-highlight"] {{ background-color: {p.accent}; }}
 }}
 .stButton button:hover {{ border-color: {p.accent}; }}
 
-/* Logotipo: toma el acento de la liga a traves de currentColor. */
+/* Logotipo: toma el acento de la liga a través de currentColor. */
 .logotipo {{ color: {p.accent}; display: inline-flex; }}
 .logotipo svg, .logotipo img {{ width: 100%; height: 100%; }}
 .marca-logo {{ display: flex; align-items: center; justify-content: flex-start; }}
@@ -217,7 +217,7 @@ div[data-baseweb="tab-highlight"] {{ background-color: {p.accent}; }}
 }}
 .ficha-escudo .dato {{ color: {TEXT_MUTED}; font-size: .78rem; }}
 
-/* Liga que aun no esta cargada: en sombra, para que se lea como un anuncio y
+/* Liga que aún no está cargada: en sombra, para que se lea como un anuncio y
    no como algo en lo que se pueda entrar. */
 .ficha-proxima {{ text-align: center; padding: .5rem 0 .3rem 0; opacity: .38; }}
 .ficha-proxima img {{
@@ -245,7 +245,7 @@ div[data-baseweb="tab-highlight"] {{ background-color: {p.accent}; }}
     color: {TEXT_MUTED}; font-size: .85rem; margin-top: .35rem; line-height: 1.45;
 }}
 
-/* Panel de lectura que acompana a un grafico. */
+/* Panel de lectura que acompana a un gráfico. */
 .panel-detalle {{
     background: {SURFACE};
     border: 1px solid {BORDER};
@@ -254,7 +254,7 @@ div[data-baseweb="tab-highlight"] {{ background-color: {p.accent}; }}
     padding: .7rem .85rem;
     margin-bottom: .5rem;
 }}
-.panel-detalle .titulo {{
+.panel-detalle .título {{
     color: {TEXT_MUTED}; font-size: .7rem; text-transform: uppercase;
     letter-spacing: .07em; margin-bottom: .15rem;
 }}

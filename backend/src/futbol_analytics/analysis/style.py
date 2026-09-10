@@ -36,14 +36,14 @@ DEFAULT_STYLES = 5
 # Como se lee cada rasgo cuando esta muy por encima o muy por debajo de la media.
 # Es el vocabulario con el que se construyen las etiquetas.
 DESCRIPTORS: dict[str, tuple[str, str]] = {
-    "pressing": ("presion asfixiante", "presion pasiva"),
+    "pressing": ("presión asfixiante", "presión pasiva"),
     "territory": ("campo rival como territorio", "poca presencia en campo rival"),
     "chance_creation": ("genera mucho peligro", "genera poco peligro"),
     "chance_prevention": ("concede poco", "concede mucho"),
     "finishing": ("finaliza por encima de lo esperado", "desperdicia ocasiones"),
     "chance_quality": ("cada llegada es peligrosa", "llega mucho y remata mal"),
     "pressed": ("le presionan arriba", "le dejan salir jugando"),
-    "box_defence": ("aguanta el asedio", "se le mete todo el mundo en el area"),
+    "box_defence": ("aguanta el asedio", "se le mete todo el mundo en el área"),
 }
 
 

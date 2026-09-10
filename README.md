@@ -540,6 +540,23 @@ ejes a la vez y no dice por donde empezar; el panel de la derecha responde a eso
 sin obligar a bajar. Por eso el grafico se dibuja mas pequeno de lo habitual:
 caben los dos, pero solo si el circulo no ocupa la pantalla entera.
 
+### Mapa de tiros
+
+Desde donde tira un jugador y con que calidad. Es lo que ningun agregado
+responde: un mismo npxG por 90 puede venir de tres remates claros o de quince
+disparos lejanos, y para un scout no son el mismo futbolista.
+
+El tamano del punto es el xG del remate, asi que se ve de un vistazo si alguien
+vive de ocasiones grandes o de muchas pequenas. Y el reparto por situacion
+—jugada, corner, falta directa, penalti— distingue al delantero que vive del
+juego del que vive del balon parado, que el xG total esconde.
+
+**Los penaltis van etiquetados aunque Understat los deje sin clasificar.** No es
+una suposicion: comparten la situacion vacia, el xG identico hasta el ultimo
+decimal y las coordenadas exactas del punto de penalti, y ninguna otra jugada
+reproduce eso. Sin la etiqueta, el npxG calculado desde los tiros los incluiria
+en silencio, y "sin penaltis" es justo lo que distingue a esa metrica.
+
 ### Jugadores similares
 
 Debajo del perfil, quien mas juega asi dentro de su mismo grupo posicional. Es
@@ -689,6 +706,9 @@ perfil:
   pendiente, porque comparar a un central con un lateral es justo lo que hoy
   distorsiona los percentiles de la defensa.
 - **Los porteros no tienen metricas propias**, y por tanto no tienen grafico.
-- **El ajuste por posesion no se aplica a nada.** La maquinaria existe, pero
-  ninguna metrica de Understat es del tipo que ese ajuste corrige (divide por el
-  tiempo *sin* balon, que es lo que necesita una metrica defensiva).
+- **No hay ajuste por posesion, y el conmutador se ha retirado.** Ese ajuste
+  divide por el tiempo *sin* balon, que es la correccion de una metrica
+  defensiva, y Understat no publica ninguna. Ofrecerlo devolvia un perfil con
+  once metricas y cero percentiles: no era un boton que no hiciera nada, era uno
+  que dejaba la pantalla en blanco. La maquinaria sigue en el backend, probada,
+  para el dia que entren metricas defensivas.

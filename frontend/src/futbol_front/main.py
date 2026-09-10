@@ -20,7 +20,7 @@ from futbol_front.state import cached_health
 from futbol_front.views import home, players, teams
 
 st.set_page_config(
-    page_title="Futbol Analytics",
+    page_title="Fútbol Analytics",
     page_icon=":soccer:",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -55,7 +55,7 @@ def _cabecera(destino: str) -> None:
     with marca:
         # Boton sin borde: tiene que leerse como la marca, no como un control.
         st.button(
-            "Futbol Analytics",
+            "Fútbol Analytics",
             type="tertiary",
             help="Volver a la portada",
             on_click=home.ir_a,
@@ -94,18 +94,18 @@ def _estado_de_los_datos() -> None:
 
         version = estado.get("data_version", "desconocida")
         if version in {"sin-datos", "desconocida"}:
-            st.warning("Sin datos cargados todavia.")
+            st.warning("Sin datos cargados todavía.")
         else:
-            st.caption(f"Ultima carga correcta: {version[:16].replace('T', ' ')}")
+            st.caption(f"Última carga correcta: {version[:16].replace('T', ' ')}")
 
         # La fecha de la ultima carga CORRECTA no dice si el ultimo intento
         # fallo. Con la carga programada esa diferencia importa: sin este aviso,
         # un ETL roto pasaria semanas sin que nadie se enterase.
         ultimo = estado.get("last_etl_status")
         if ultimo == "failed":
-            st.error("La ultima carga del ETL fallo: los datos no estan al dia.")
+            st.error("La última carga del ETL fallo: los datos no están al día.")
         elif ultimo == "stale":
-            st.warning("La ultima carga se quedo a medias.")
+            st.warning("La última carga se quedo a medias.")
         elif ultimo == "running":
             st.info("Hay una carga en marcha.")
 
@@ -115,16 +115,20 @@ def _estado_de_los_datos() -> None:
                 """
                 Un percentil dice **donde esta** un jugador respecto a sus
                 comparables, no cuanto hace. El percentil 80 en pases clave
-                significa que el 80 % de los de su posicion en las Big 5 dan
+                significa que el 80 % de los de su posición en las Big 5 dan
                 menos.
 
                 - **No todo lo alto es bueno.** Los tiros o las tarjetas
                   describen como juega, no lo bueno que es. La plataforma los
                   marca como rasgo y no como fortaleza.
                 - **El grupo DF mezcla centrales y laterales.** Para afinar,
-                  compara por rol en lugar de por posicion.
+                  compara por rol en lugar de por posición.
                 - **La PPDA es aproximada:** se calcula sobre todo el campo y no
-                  sobre el 60 % rival como la canonica.
+                  sobre el 60 % rival como la canónica.
+                - **No hay ajuste por posesión.** Ese ajuste divide por el tiempo
+                  *sin* balón, que es la corrección de una métrica defensiva, y
+                  Understat no publica ninguna. Ofrecerlo sería un botón que no
+                  hace nada.
                 """
             )
 

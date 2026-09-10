@@ -50,7 +50,7 @@ def catalog(data: DataAccessDep) -> Catalog:
     )
 
 
-@router.get("/metrics", summary="Catalogo de metricas")
+@router.get("/metrics", summary="Catalogo de métricas")
 def metrics() -> list[MetricInfo]:
     """Las metricas que se pueden pedir, con como hay que leerlas.
 
@@ -84,7 +84,7 @@ def roles() -> list[RoleInfo]:
     ]
 
 
-@router.get("/templates", summary="Ejes del pizza chart por posicion")
+@router.get("/templates", summary="Ejes del pizza chart por posición")
 def templates() -> list[PizzaTemplate]:
     """Las metricas que se pintan para cada posicion, en orden.
 
@@ -109,7 +109,7 @@ def templates() -> list[PizzaTemplate]:
     ]
 
 
-@router.get("/etl", summary="Ultimas ejecuciones del ETL")
+@router.get("/etl", summary="Últimas ejecuciones del ETL")
 def etl_runs(
     data: DataAccessDep,
     limit: int = Query(default=5, ge=1, le=50),

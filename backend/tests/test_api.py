@@ -187,7 +187,7 @@ def test_el_perfil_avisa_cuando_la_poblacion_es_pequena(client: TestClient) -> N
     # 40 defensas estan por debajo del umbral de fiabilidad.
     cuerpo = client.get("/players/DF 0/profile", params={"season": TEMPORADA}).json()
 
-    assert any("fragil" in aviso for aviso in cuerpo["caveats"])
+    assert any("frágil" in aviso for aviso in cuerpo["caveats"])
 
 
 def test_un_jugador_inexistente_da_404(client: TestClient) -> None:
@@ -317,7 +317,7 @@ def test_una_carga_nueva_del_etl_invalida_lo_cacheado(
     assert cache.size() == entradas + 1
 
 
-# --- Contexto de la poblacion -----------------------------------------------
+# --- Contexto de la población -----------------------------------------------
 
 
 def test_el_perfil_dice_cuantas_ligas_sostienen_el_percentil(client: TestClient) -> None:
@@ -571,7 +571,7 @@ def test_la_carrera_y_el_valor_llegan_al_cliente(
     assert len(cuerpo["transfers"]) == 1
     # Un valor por debajo del maximo no es un fallo del dato, es una carrera: se
     # explica en lugar de dejar que el usuario lo lea como un error.
-    assert any("maximo" in aviso for aviso in cuerpo["caveats"])
+    assert any("máximo" in aviso for aviso in cuerpo["caveats"])
 
 
 def test_el_catalogo_publica_el_umbral_que_se_aplica_de_verdad(client: TestClient) -> None:

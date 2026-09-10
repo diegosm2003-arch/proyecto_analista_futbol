@@ -25,9 +25,9 @@ from dataclasses import dataclass
 # Understat no publica acciones defensivas. Estas tres si describen lo que hay,
 # y ademas separan tres formas distintas de aportar al ataque que a menudo se
 # confunden en una sola cifra de goles y asistencias.
-FINISHING = "Finalizacion"
-CREATION = "Creacion"
-BUILDUP = "Construccion"
+FINISHING = "Finalización"
+CREATION = "Creación"
+BUILDUP = "Construcción"
 CATEGORIES: tuple[str, ...] = (FINISHING, CREATION, BUILDUP)
 
 
@@ -39,8 +39,13 @@ class Slice:
     category: str
 
 
-def _slices(**por_categoria: tuple[str, ...]) -> tuple[Slice, ...]:
-    """Construye las porciones respetando el orden de las categorias."""
+def _slices(por_categoria: dict[str, tuple[str, ...]]) -> tuple[Slice, ...]:
+    """Construye las porciones respetando el orden de las categorias.
+
+    Recibe un diccionario y no argumentos con nombre porque las categorias
+    llevan tilde —son texto que ve el usuario— y una tilde no cabe en el nombre
+    de un parametro de Python.
+    """
     return tuple(
         Slice(metric=metrica, category=categoria)
         for categoria in CATEGORIES
@@ -55,9 +60,11 @@ def _slices(**por_categoria: tuple[str, ...]) -> tuple[Slice, ...]:
 # fuerte en construccion y flojo en finalizacion, que es exactamente lo que
 # queremos que se vea de un vistazo.
 OUTFIELD_TEMPLATE: tuple[Slice, ...] = _slices(
-    Finalizacion=("np_goals", "np_xg", "shots"),
-    Creacion=("assists", "xa", "key_passes"),
-    Construccion=("xg_chain", "xg_buildup"),
+    {
+        FINISHING: ("np_goals", "np_xg", "shots"),
+        CREATION: ("assists", "xa", "key_passes"),
+        BUILDUP: ("xg_chain", "xg_buildup"),
+    }
 )
 
 PIZZA_TEMPLATES: dict[str, tuple[Slice, ...]] = {

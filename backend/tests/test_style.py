@@ -94,14 +94,14 @@ def test_la_etiqueta_recoge_los_dos_rasgos_mas_extremos() -> None:
         {"pressing": 2.0, "territory": -1.5, "chance_creation": 0.1, "finishing": 0.2}
     )
 
-    assert style.describe(centroide) == ("presion asfixiante, poca presencia en campo rival")
+    assert style.describe(centroide) == ("presión asfixiante, poca presencia en campo rival")
 
 
 def test_el_rasgo_de_presion_ya_viene_invertido() -> None:
     # `build_features` invierte la PPDA, asi que aqui un valor alto siempre
     # significa presionar mas. El descriptor no tiene que volver a invertirlo.
-    assert style.describe(pd.Series({"pressing": 2.0}), n_rasgos=1) == "presion asfixiante"
-    assert style.describe(pd.Series({"pressing": -2.0}), n_rasgos=1) == "presion pasiva"
+    assert style.describe(pd.Series({"pressing": 2.0}), n_rasgos=1) == "presión asfixiante"
+    assert style.describe(pd.Series({"pressing": -2.0}), n_rasgos=1) == "presión pasiva"
 
 
 def test_un_centroide_sin_rasgos_conocidos_no_revienta() -> None:

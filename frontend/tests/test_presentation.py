@@ -180,7 +180,7 @@ def test_el_resumen_ignora_las_metricas_donde_menos_es_mejor() -> None:
 def test_sin_metricas_con_direccion_se_dice_claramente() -> None:
     perfil = {"metrics": [{"label": "Despejes", "percentile": 99.0, "higher_is_better": None}]}
 
-    assert "Sin metricas suficientes" in summarise_profile(perfil)
+    assert "Sin métricas suficientes" in summarise_profile(perfil)
 
 
 # --- Nombre de fichero ------------------------------------------------------
@@ -341,7 +341,7 @@ def test_con_poblacion_pequena_se_avisa_de_que_el_percentil_es_fragil() -> None:
         )
     )
 
-    assert "poblacion" in avisos[0].note
+    assert "población" in avisos[0].note
 
 
 # --- Etiqueta de temporada --------------------------------------------------

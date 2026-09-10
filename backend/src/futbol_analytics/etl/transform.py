@@ -309,3 +309,87 @@ def to_records(frame: pd.DataFrame) -> list[dict]:
         return []
     cleaned = frame.astype(object).where(pd.notna(frame), None)
     return cleaned.to_dict(orient="records")
+
+
+def build_shot_frame(shots: pd.DataFrame) -> pd.DataFrame:
+    """Convierte los tiros de Understat en filas de `shot_event`.
+
+    Understat devuelve el partido, el equipo y el jugador en el indice, y todo
+    lo demas en columnas. Aqui se aplana y se renombra a los nombres de la
+    tabla; no se calcula nada, porque el xG de cada tiro ya viene dado y
+    recalcularlo seria inventarselo.
+
+    Las coordenadas se dejan tal cual, normalizadas de 0 a 1: convertirlas a
+    metros exigiria suponer las dimensiones del campo, que cambian de estadio a
+    estadio, y ninguna vista lo necesita.
+    """
+    if shots.empty:
+        return pd.DataFrame()
+
+    plano = shots.reset_index()
+    filas = pd.DataFrame(
+        {
+            "shot_id": plano["shot_id"].astype("string"),
+            "league": plano["league"].astype("string"),
+            "season": plano["season"].astype("string"),
+            "game_id": plano["game_id"].astype("string"),
+            "match_date": pd.to_datetime(plano["date"], errors="coerce").dt.date,
+            "team": plano["team"].astype("string"),
+            "player": plano["player"].astype("string"),
+            # El identificador de Understat, que es el mismo puente que usa
+            # `player_season`: los tiros se unen a un jugador sin cruzar nombres.
+            "understat_id": plano["player_id"].astype("string"),
+            "minute": pd.to_numeric(plano["minute"], errors="coerce").astype("Int64"),
+            "xg": pd.to_numeric(plano["xg"], errors="coerce"),
+            "location_x": pd.to_numeric(plano["location_x"], errors="coerce"),
+            "location_y": pd.to_numeric(plano["location_y"], errors="coerce"),
+            "body_part": plano["body_part"].astype("string"),
+            "situation": plano["situation"].astype("string"),
+            "result": plano["result"].astype("string"),
+            "assist_player": plano["assist_player"].astype("string"),
+        }
+    )
+
+    filas["situation"] = _marcar_penaltis(filas)
+
+    # Un tiro sin identificador no se puede insertar ni volver a encontrar.
+    filas = filas.dropna(subset=["shot_id"])
+    antes = len(filas)
+    filas = filas.drop_duplicates(subset=["shot_id"])
+    if len(filas) != antes:
+        logger.warning(
+            "Tiros repetidos descartados",
+            extra={"descartados": antes - len(filas)},
+        )
+
+    logger.info("Filas de tiro preparadas", extra={"filas": len(filas)})
+    return filas.astype(object).where(pd.notna(filas), None)
+
+
+# El punto de penalti en las coordenadas normalizadas de Understat. Todos los
+# penaltis se lanzan del mismo sitio, asi que la posicion es exacta y no
+# aproximada.
+_PENALTI_X, _PENALTI_Y = 0.885, 0.5
+_TOLERANCIA = 0.005
+
+
+def _marcar_penaltis(shots: pd.DataFrame) -> pd.Series:
+    """Pone "Penalty" en la situacion de los penaltis, que Understat deja vacia.
+
+    No es una suposicion. Los tiros afectados comparten tres cosas a la vez: la
+    situacion vacia, el xG identico hasta el ultimo decimal (0,7432776...) y las
+    coordenadas exactas del punto de penalti. Ninguna otra jugada reproduce eso.
+
+    Importa porque sin la etiqueta el npxG calculado desde los tiros incluiria
+    penaltis en silencio, y "sin penaltis" es justo lo que distingue a esa
+    metrica. Los agregados de `player_season` no se ven afectados: alli Understat
+    ya publica el npxG por separado.
+    """
+    en_el_punto = ((shots["location_x"] - _PENALTI_X).abs() <= _TOLERANCIA) & (
+        (shots["location_y"] - _PENALTI_Y).abs() <= _TOLERANCIA
+    )
+    penaltis = shots["situation"].isna() & en_el_punto
+
+    if penaltis.any():
+        logger.info("Penaltis identificados", extra={"tiros": int(penaltis.sum())})
+    return shots["situation"].mask(penaltis, "Penalty")

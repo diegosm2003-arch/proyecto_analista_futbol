@@ -22,7 +22,7 @@ import io
 
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-from mplsoccer import PyPizza
+from mplsoccer import PyPizza, VerticalPitch
 
 from futbol_front.presentation import ComparisonData, PizzaData, StyleMapData
 from futbol_front.theme import DEFAULT, Palette
@@ -35,7 +35,7 @@ from futbol_front.theme import DEFAULT, Palette
 # No son ataque / posesion / defensa como en FBref porque no medimos defensa.
 # Estas tres separan tres formas distintas de aportar al ataque que una cifra
 # de goles y asistencias confunde en una sola.
-FINISHING, CREATION, BUILDUP = "Finalizacion", "Creacion", "Construccion"
+FINISHING, CREATION, BUILDUP = "Finalización", "Creación", "Construcción"
 
 # Un color por categoria, constante entre ligas. Se distinguen bien en pantalla
 # y tambien impresos en gris, que importa si el grafico acaba en un post.
@@ -66,7 +66,7 @@ def pizza(data: PizzaData, title: str, subtitle: str, palette: Palette = DEFAULT
     la longitud dice donde esta respecto a sus comparables, no cuanto hace.
     """
     if not len(data):
-        raise ValueError("No hay metricas con percentil para dibujar el grafico.")
+        raise ValueError("No hay métricas con percentil para dibujar el gráfico.")
 
     colores = [CATEGORY_COLORS.get(categoria, UNKNOWN_CATEGORY) for categoria in data.categories]
 
@@ -297,7 +297,7 @@ def style_map(data: StyleMapData, title: str, palette: Palette = DEFAULT) -> Fig
     contrario de lo que la vista sugiere.
     """
     if not len(data):
-        raise ValueError("No hay equipos con posesion y presion conocidas.")
+        raise ValueError("No hay equipos con posesión y presión conocidas.")
 
     figura, ejes = _lienzo(MAP_SIZE)
     colores = plt.get_cmap("Set2")
@@ -327,7 +327,7 @@ def style_map(data: StyleMapData, title: str, palette: Palette = DEFAULT) -> Fig
 
     ejes.invert_yaxis()
     ejes.set_xlabel("Llegadas a zona de remate por partido", color=TEXT_MUTED, fontsize=9)
-    ejes.set_ylabel("PPDA aproximada (arriba = mas presion)", color=TEXT_MUTED, fontsize=9)
+    ejes.set_ylabel("PPDA aproximada (arriba = más presión)", color=TEXT_MUTED, fontsize=9)
     ejes.set_title(title, color=TEXT, weight="bold", fontsize=12)
     ejes.grid(color=GRID, linewidth=0.7, zorder=1)
     ejes.tick_params(colors=TEXT_MUTED, labelsize=8)
@@ -353,7 +353,7 @@ def compare(
     jugador", sino "en que se diferencia de aquel".
     """
     if not len(data):
-        raise ValueError("Los dos jugadores no comparten ninguna metrica con percentil.")
+        raise ValueError("Los dos jugadores no comparten ninguna métrica con percentil.")
 
     color_a, color_b = palette.accent, palette.secondary
 
@@ -446,3 +446,82 @@ def _lienzo(size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
     for lado in ejes.spines.values():
         lado.set_color(GRID)
     return figura, ejes
+
+
+def shot_map(
+    shots: list[dict],
+    title: str,
+    palette: Palette = DEFAULT,
+) -> Figure:
+    """Mapa de tiros sobre medio campo.
+
+    Es el gráfico más reconocible de la analítica de fútbol moderna, y aquí
+    responde a algo que ningún agregado responde: un mismo npxG por 90 puede
+    venir de tres remates claros o de quince disparos lejanos, y para un scout
+    no son el mismo futbolista.
+
+    **El tamaño del punto es el xG del tiro**, no un valor fijo: es lo que hace
+    visible de un vistazo que un jugador vive de ocasiones grandes o de muchas
+    pequeñas. El color separa el gol del resto.
+
+    Se dibuja medio campo porque prácticamente ningún tiro sale de la mitad
+    propia, y con el campo entero los remates se apelmazan en un rincón.
+    """
+    if not shots:
+        raise ValueError("Este jugador no tiene tiros cargados.")
+
+    campo = VerticalPitch(
+        pitch_type="opta",
+        half=True,
+        pitch_color=BACKGROUND,
+        line_color=GRID,
+        linewidth=1.1,
+        pad_bottom=-8,
+    )
+    figura, ejes = campo.draw(figsize=(4.6, 4.4))
+    figura.patch.set_facecolor(BACKGROUND)
+
+    # Understat normaliza a 0-1 y `opta` espera 0-100.
+    x = [(s["location_x"] or 0) * 100 for s in shots]
+    y = [(s["location_y"] or 0) * 100 for s in shots]
+    tamanos = [max(18.0, (s["xg"] or 0.0) * 900) for s in shots]
+    goles = [s["result"] == "Goal" for s in shots]
+
+    campo.scatter(
+        [v for v, g in zip(x, goles, strict=True) if not g],
+        [v for v, g in zip(y, goles, strict=True) if not g],
+        s=[v for v, g in zip(tamanos, goles, strict=True) if not g],
+        ax=ejes,
+        color=palette.secondary,
+        alpha=0.45,
+        edgecolor=BACKGROUND,
+        linewidth=0.6,
+        zorder=2,
+        label="Sin gol",
+    )
+    campo.scatter(
+        [v for v, g in zip(x, goles, strict=True) if g],
+        [v for v, g in zip(y, goles, strict=True) if g],
+        s=[v for v, g in zip(tamanos, goles, strict=True) if g],
+        ax=ejes,
+        color=palette.accent,
+        alpha=0.95,
+        edgecolor=TEXT,
+        linewidth=0.8,
+        zorder=3,
+        label="Gol",
+    )
+
+    figura.text(0.5, 0.965, title, size=11, ha="center", color=TEXT, weight="bold")
+    figura.text(
+        0.5,
+        0.935,
+        "El tamaño del punto es el xG del remate",
+        size=7.5,
+        ha="center",
+        color=TEXT_MUTED,
+    )
+    leyenda = ejes.legend(loc="lower center", fontsize=7, frameon=False, ncol=2)
+    for texto in leyenda.get_texts():
+        texto.set_color(TEXT_MUTED)
+    return figura

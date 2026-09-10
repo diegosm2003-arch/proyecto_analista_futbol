@@ -24,12 +24,12 @@ class Health(BaseModel):
 
     status: str
     version: str
-    data_version: str = Field(description="Marca de la ultima carga correcta del ETL")
+    data_version: str = Field(description="Marca de la última carga correcta del ETL")
     last_etl_status: str | None = Field(
         default=None,
         description=(
-            "Estado del ultimo intento de carga: success, failed, running o stale. "
-            "Puede ser 'failed' aunque data_version tenga fecha, si el ultimo "
+            "Estado del último intento de carga: success, failed, running o stale. "
+            "Puede ser 'failed' aunque data_version tenga fecha, si el último "
             "intento no llego a terminar"
         ),
     )
@@ -56,11 +56,11 @@ class MetricInfo(BaseModel):
     label: str
     positions: list[str]
     higher_is_better: bool | None = Field(
-        description="Nulo cuando la metrica describe estilo y no calidad"
+        description="Nulo cuando la métrica describe estilo y no calidad"
     )
-    possession_sensitive: bool = Field(description="Si se ofrece tambien ajustada por posesion")
+    possession_sensitive: bool = Field(description="Si se ofrece también ajustada por posesión")
     team_dependent: bool = Field(
-        default=False, description="Si la metrica premia jugar en un equipo dominante"
+        default=False, description="Si la métrica premia jugar en un equipo dominante"
     )
 
 
@@ -128,11 +128,11 @@ class MetricPercentile(BaseModel):
     label: str
     total: float | None = Field(description="Valor acumulado en la temporada")
     per90: float | None
-    padj: float | None = Field(default=None, description="Ajustado por posesion del equipo")
-    percentile: float | None = Field(description="0 a 100 dentro de su poblacion")
+    padj: float | None = Field(default=None, description="Ajustado por posesión del equipo")
+    percentile: float | None = Field(description="0 a 100 dentro de su población")
     higher_is_better: bool | None
     team_dependent: bool = Field(
-        default=False, description="Si la metrica premia jugar en un equipo dominante"
+        default=False, description="Si la métrica premia jugar en un equipo dominante"
     )
 
 
@@ -144,10 +144,10 @@ class PlayerProfile(BaseModel):
     population: Population
     population_group: str | None = Field(description="Grupo contra el que se compara")
     population_size: int = Field(
-        description="Jugadores en la poblacion. Por debajo de ~50 el percentil es fragil"
+        description="Jugadores en la población. Por debajo de ~50 el percentil es frágil"
     )
     population_leagues: int = Field(
-        description="Ligas cargadas en la poblacion. El diseno asume las 5 grandes"
+        description="Ligas cargadas en la población. El diseño asume las 5 grandes"
     )
     min_minutes_applied: int = Field(
         description="Umbral de minutos usado. Baja solo si la temporada esta empezada"
@@ -169,13 +169,42 @@ class Insight(BaseModel):
     caveat: str = Field(default="", description="Como hay que leerlo")
 
 
+class Shot(BaseModel):
+    """Un tiro, con donde se hizo y cuanto valia."""
+
+    minute: int | None
+    xg: float | None = Field(description="xG de ESTE tiro, no acumulado")
+    location_x: float | None = Field(description="0 a 1; 1 es la linea de gol rival")
+    location_y: float | None = Field(description="0 a 1 de banda a banda")
+    body_part: str | None
+    situation: str | None = Field(
+        default=None, description="Open Play, From Corner, Set Piece, Direct Freekick o Penalty"
+    )
+    result: str | None
+    match_date: date | None
+
+
+class ShotMap(BaseModel):
+    """Todos los tiros de un jugador en una temporada."""
+
+    player: PlayerSummary
+    shots: list[Shot]
+    total_xg: float = Field(description="Suma del xG de todos los tiros")
+    np_xg: float = Field(description="Lo mismo sin penaltis")
+    goals: int
+    xg_per_shot: float | None = Field(
+        default=None, description="Calidad media de ocasion, sin penaltis"
+    )
+    caveats: list[str] = Field(default_factory=list)
+
+
 class PlayerCard(BaseModel):
     """Ficha de Transfermarkt: el contexto que un percentil no da."""
 
     age: int | None
     date_of_birth: date | None
     position: str | None = Field(
-        default=None, description="Posicion concreta: Centre-Back, Left Winger..."
+        default=None, description="Posición concreta: Centre-Back, Left Winger..."
     )
     nationality: str | None
     height_cm: int | None
@@ -217,8 +246,8 @@ class PlayerMarket(BaseModel):
 
     player: PlayerSummary
     card: PlayerCard | None
-    current_value_eur: float | None = Field(description="Ultima tasacion conocida")
-    peak_value_eur: float | None = Field(description="Maximo historico")
+    current_value_eur: float | None = Field(description="Ultima tasación conocida")
+    peak_value_eur: float | None = Field(description="Máximo histórico")
     valuations: list[Valuation]
     transfers: list[Transfer]
     caveats: list[str] = Field(default_factory=list)
@@ -231,12 +260,12 @@ class SimilarPlayer(BaseModel):
     team: str
     player: str
     minutes: int | None
-    similarity: float = Field(description="0 a 100. 100 seria un perfil identico")
-    closest: list[str] = Field(description="Metricas en las que mas se parecen")
-    furthest: list[str] = Field(description="Metricas en las que mas se separan")
+    similarity: float = Field(description="0 a 100. 100 sería un perfil idéntico")
+    closest: list[str] = Field(description="Métricas en las que más se parecen")
+    furthest: list[str] = Field(description="Métricas en las que más se separan")
     profile: dict[str, float] = Field(
         default_factory=dict,
-        description="Percentil medio por familia: finalizacion, creacion y construccion",
+        description="Percentil medio por familia: finalización, creación y construcción",
     )
 
 
@@ -284,7 +313,7 @@ class TeamStyle(BaseModel):
     style: str
     cluster: int
     ppda: float | None = Field(
-        description="Pases del rival por accion defensiva. Mas bajo, mas presion"
+        description="Pases del rival por accion defensiva. Mas bajo, más presión"
     )
     territory: float | None = Field(
         description="Llegadas a zona de remate por partido: cuanto campo pisa de verdad"
@@ -299,6 +328,6 @@ class StyleReport(BaseModel):
     season: str
     n_styles: int
     silhouette: float | None = Field(
-        description="Calidad de la separacion. Bajo no invalida: el futbol es un continuo"
+        description="Calidad de la separación. Bajo no invalida: el fútbol es un continuo"
     )
     teams: list[TeamStyle]

@@ -21,6 +21,7 @@ from futbol_analytics.db.schema import (
     player_profile,
     player_season,
     player_transfers,
+    shot_event,
     team_identity,
     team_season,
 )
@@ -71,6 +72,9 @@ class DataAccess(Protocol):
 
     def ages(self, season: str) -> dict[str, int]:
         """Edad de cada jugador con ficha, por `understat_id`."""
+
+    def shots(self, season: str, understat_id: str) -> list[dict]:
+        """Tiros de un jugador en una temporada."""
 
 
 class SqlDataAccess:
@@ -210,6 +214,18 @@ class SqlDataAccess:
         )
         with self._engine.connect() as conexion:
             return {fila[0]: int(fila[1]) for fila in conexion.execute(consulta)}
+
+    def shots(self, season: str, understat_id: str) -> list[dict]:
+        consulta = (
+            select(shot_event)
+            .where(
+                shot_event.c.season == season,
+                shot_event.c.understat_id == understat_id,
+            )
+            .order_by(shot_event.c.match_date, shot_event.c.minute)
+        )
+        with self._engine.connect() as conexion:
+            return [dict(fila) for fila in conexion.execute(consulta).mappings()]
 
     def _read(self, consulta) -> pd.DataFrame:
         with self._engine.connect() as conexion:

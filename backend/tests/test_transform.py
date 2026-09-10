@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from futbol_analytics.etl import transform
 from futbol_analytics.etl.transform import (
     MissingColumnsError,
     build_player_frame,
@@ -252,3 +253,69 @@ def test_to_records_convierte_los_huecos_en_none() -> None:
 
 def test_to_records_de_un_frame_vacio() -> None:
     assert to_records(pd.DataFrame()) == []
+
+
+# --- Tiros individuales -----------------------------------------------------
+
+
+def _tiros(**columnas) -> pd.DataFrame:
+    base = {
+        "shot_id": ["1", "2"],
+        "league": ["ESP-La Liga"] * 2,
+        "season": ["2627"] * 2,
+        "game": ["g1"] * 2,
+        "game_id": ["29158"] * 2,
+        "date": ["2026-08-15", "2026-08-15"],
+        "team": ["Barcelona"] * 2,
+        "player": ["A", "B"],
+        "player_id": ["100", "200"],
+        "minute": [10, 20],
+        "xg": [0.5, 0.7432776093482971],
+        "location_x": [0.7, 0.885],
+        "location_y": [0.4, 0.5],
+        "body_part": ["Right Foot", None],
+        "situation": ["Open Play", None],
+        "result": ["Goal", "Goal"],
+        "assist_player": ["C", None],
+    }
+    base.update(columnas)
+    frame = pd.DataFrame(base)
+    return frame.set_index(["league", "season", "game", "team", "player"])
+
+
+def test_un_penalti_se_reconoce_aunque_understat_lo_deje_sin_situacion() -> None:
+    # Los penaltis llegan con la situacion vacia. Se reconocen sin suponer nada:
+    # comparten el punto de lanzamiento exacto, que ninguna otra jugada
+    # reproduce. Sin la etiqueta, el npxG calculado desde los tiros incluiria
+    # penaltis en silencio.
+    filas = transform.build_shot_frame(_tiros())
+
+    situaciones = dict(zip(filas["shot_id"], filas["situation"], strict=True))
+    assert situaciones["1"] == "Open Play"
+    assert situaciones["2"] == "Penalty"
+
+
+def test_un_tiro_fuera_del_punto_de_penalti_no_se_etiqueta() -> None:
+    # Un tiro sin situacion desde otro sitio se queda sin ella: es mejor un
+    # hueco que una etiqueta inventada.
+    filas = transform.build_shot_frame(_tiros(location_x=[0.7, 0.6], location_y=[0.4, 0.3]))
+
+    assert filas[filas["shot_id"] == "2"]["situation"].iloc[0] is None
+
+
+def test_el_identificador_de_jugador_viaja_con_el_tiro() -> None:
+    # Es el mismo puente que usa player_season: sin el habria que cruzar por
+    # nombre otra vez.
+    filas = transform.build_shot_frame(_tiros())
+
+    assert set(filas["understat_id"]) == {"100", "200"}
+
+
+def test_un_tiro_repetido_no_se_carga_dos_veces() -> None:
+    repetidos = _tiros(shot_id=["1", "1"])
+
+    assert len(transform.build_shot_frame(repetidos)) == 1
+
+
+def test_sin_tiros_no_revienta() -> None:
+    assert transform.build_shot_frame(pd.DataFrame()).empty

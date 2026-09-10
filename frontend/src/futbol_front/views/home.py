@@ -46,10 +46,10 @@ def render() -> None:
         f"""
         <div style="padding: 2.2rem 0 0.6rem 0;">
           <div class="marca-portada">{branding.logo_html(64)}</div>
-          <h1 style="font-size: 3rem; margin: .6rem 0 .2rem 0;">Futbol Analytics</h1>
+          <h1 style="font-size: 3rem; margin: .6rem 0 .2rem 0;">Fútbol Analytics</h1>
           <p style="color:#8D9AB4; font-size:1.05rem; max-width: 46rem; line-height:1.6;">
-            Percentiles por posicion frente a las cinco grandes ligas, perfiles de rol,
-            estilo de equipo y valor de mercado. Cada numero viene con el contexto que
+            Percentiles por posición frente a las cinco grandes ligas, perfiles de rol,
+            estilo de equipo y valor de mercado. Cada número viene con el contexto que
             hace falta para no leerlo mal.
           </p>
         </div>
@@ -67,7 +67,7 @@ def render() -> None:
         titulo="Jugadores",
         texto=(
             "Perfil de percentiles, rol asignado, valor de mercado y carrera. "
-            "Y quien mas juega asi en las Big 5."
+            "Y quien más juega así en las Big 5."
         ),
         etiqueta="Analizar jugadores",
         destino=JUGADORES,
@@ -78,7 +78,7 @@ def render() -> None:
         icono=ICONO_EQUIPO,
         titulo="Equipos",
         texto=(
-            "Estilo de juego por territorio y altura de presion, con los equipos "
+            "Estilo de juego por territorio y altura de presión, con los equipos "
             "agrupados por como compiten y no por lo que ganan."
         ),
         etiqueta="Analizar equipos",
@@ -158,7 +158,7 @@ def _hallazgos() -> None:
         return
 
     if not catalogo["seasons"]:
-        st.warning("No hay datos cargados todavia.")
+        st.warning("No hay datos cargados todavía.")
         return
 
     temporada = catalogo["seasons"][-1]
@@ -218,6 +218,6 @@ def _que_hay_cargado() -> None:
 
     st.caption(
         "Los percentiles se calculan contra **las cinco grandes ligas**, no solo contra "
-        "LaLiga: con una sola liga la muestra por posicion se queda corta y el percentil "
-        "acaba midiendo el ruido. El filtro por liga se aplica despues de calcular."
+        "LaLiga: con una sola liga la muestra por posición se queda corta y el percentil "
+        "acaba midiendo el ruido. El filtro por liga se aplica después de calcular."
     )

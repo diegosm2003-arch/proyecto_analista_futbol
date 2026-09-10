@@ -27,12 +27,11 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from typing import Any
+
+import pandas as pd
 
 from futbol_analytics.config import get_settings
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +82,6 @@ def read_player_season_stats(
     temporadas = seasons or settings.seasons
 
     if not ligas:
-        import pandas as pd
-
         logger.warning("Ninguna liga pedida esta en Understat")
         return pd.DataFrame()
 
@@ -94,6 +91,37 @@ def read_player_season_stats(
     )
     frame = _understat(ligas, temporadas).read_player_season_stats()
     logger.info("Understat descargado", extra={"filas": len(frame)})
+    return frame
+
+
+def read_shot_events(
+    leagues: list[str] | None = None,
+    seasons: list[str] | None = None,
+) -> pd.DataFrame:
+    """Tiros individuales, uno por fila.
+
+    Es el dato que separa "este jugador genera 0,35 npxG por 90" de "desde donde
+    tira y con que calidad". Trae coordenadas, el xG de ESE tiro, la parte del
+    cuerpo, el resultado y —lo mas infrautilizado— la situacion de la que nace:
+    jugada, corner, falta directa o balon parado en general.
+
+    El `player_id` que devuelve Understat es el mismo identificador que ya usa
+    `player_season`, asi que los tiros se unen a un jugador sin cruzar nombres.
+    """
+    settings = get_settings()
+    ligas = supported(leagues or settings.leagues)
+    temporadas = seasons or settings.seasons
+
+    if not ligas:
+        logger.warning("Ninguna liga pedida esta en Understat")
+        return pd.DataFrame()
+
+    logger.info(
+        "Descargando tiros de Understat",
+        extra={"ligas": ligas, "temporadas": temporadas},
+    )
+    frame = _understat(ligas, temporadas).read_shot_events()
+    logger.info("Tiros descargados", extra={"filas": len(frame)})
     return frame
 
 
@@ -110,8 +138,6 @@ def read_team_season_stats(
     La PPDA se promedia y no se suma porque es un ratio: sumar "pases del rival
     por accion defensiva" de 38 partidos no significa nada.
     """
-    import pandas as pd
-
     settings = get_settings()
     ligas = supported(leagues or settings.leagues)
     temporadas = seasons or settings.seasons

@@ -64,12 +64,12 @@ class Feature:
 # que el volumen de juego del equipo no entra en el calculo.
 ROLE_FEATURES: tuple[Feature, ...] = (
     # Que parte de su participacion acaba en un tiro suyo. Alto = finalizador.
-    Feature("shot_share", "np_xg", "xg_chain", "Remate sobre participacion"),
+    Feature("shot_share", "np_xg", "xg_chain", "Remate sobre participación"),
     # Que parte acaba en un tiro de otro tras su pase. Alto = creador.
-    Feature("creation_share", "xa", "xg_chain", "Asistencia sobre participacion"),
+    Feature("creation_share", "xa", "xg_chain", "Asistencia sobre participación"),
     # Que parte es participacion previa, sin rematar ni asistir. Alto =
     # constructor: el central que saca el balon o el pivote que hace de bisagra.
-    Feature("buildup_share", "xg_buildup", "xg_chain", "Construccion sobre participacion"),
+    Feature("buildup_share", "xg_buildup", "xg_chain", "Construcción sobre participación"),
     # Calidad del tiro que genera: xG por disparo. Separa al que remata desde el
     # area del que dispara de lejos.
     Feature("shot_quality", "np_xg", "shots", "xG por tiro"),
@@ -121,9 +121,9 @@ class Archetype:
 ATTACKING_ARCHETYPES: tuple[Archetype, ...] = (
     # --- Domina el remate ---
     Archetype(
-        "Finalizador de area",
+        "Finalizador de área",
         {"shot_share": 1.6, "shot_quality": 1.3, "buildup_share": -1.0, "creation_share": -0.6},
-        "Casi toda su participacion acaba en un remate suyo, y desde buena posicion.",
+        "Casi toda su participación acaba en un remate suyo, y desde buena posición.",
     ),
     Archetype(
         "Tirador de volumen",
@@ -144,22 +144,22 @@ ATTACKING_ARCHETYPES: tuple[Archetype, ...] = (
     Archetype(
         "Generador de ocasiones claras",
         {"creation_share": 1.6, "pass_quality": 1.3, "shot_share": -0.8},
-        "Su aportacion es el ultimo pase, y deja a companeros en buena posicion.",
+        "Su aportación es el último pase, y deja a compañeros en buena posición.",
     ),
     Archetype(
         "Volumen de pase clave",
         {"creation_share": 1.4, "pass_quality": -1.3, "shot_share": -0.6},
-        "Da muchos pases de ultimo tercio, pero la mayoria acaban en remates lejanos.",
+        "Da muchos pases de último tercio, pero la mayoría acaban en remates lejanos.",
     ),
     Archetype(
         "Extremo asociativo",
         {"creation_share": 1.0, "shot_share": 0.9, "buildup_share": -1.2},
-        "Reparte su aportacion entre rematar y asistir, casi nunca en la salida.",
+        "Reparte su aportación entre rematar y asistir, casi nunca en la salida.",
     ),
     Archetype(
         "Creador retrasado",
         {"creation_share": 1.1, "buildup_share": 0.9, "shot_share": -1.4},
-        "Asiste desde lejos del area y participa antes en la jugada. No remata.",
+        "Asiste desde lejos del área y participa antes en la jugada. No remata.",
     ),
     # --- Domina la construccion ---
     Archetype(
@@ -170,17 +170,17 @@ ATTACKING_ARCHETYPES: tuple[Archetype, ...] = (
     Archetype(
         "Bisagra",
         {"buildup_share": 1.2, "creation_share": 0.7, "shot_share": -1.2, "pass_quality": 0.4},
-        "Enlaza la salida con el ultimo tercio: construye y ademas da el pase previo.",
+        "Enlaza la salida con el último tercio: construye y además da el pase previo.",
     ),
     Archetype(
         "Constructor con llegada",
         {"buildup_share": 1.2, "shot_share": 0.7, "creation_share": -1.0},
-        "Sale con el balon y ademas aparece a rematar. Un perfil de llegada desde atras.",
+        "Sale con el balón y además aparece a rematar. Un perfil de llegada desde atrás.",
     ),
     Archetype(
         "Primer pase",
         {"buildup_share": 1.5, "pass_quality": -1.2, "shot_share": -1.0},
-        "Inicia muchas jugadas, pero lejos del area: su pase rara vez genera ocasion.",
+        "Inicia muchas jugadas, pero lejos del área: su pase rara vez genera ocasión.",
     ),
 )
 
@@ -245,7 +245,7 @@ def assign_roles(players: pd.DataFrame, position_group: str) -> RoleResult:
     if position_group not in ARCHETYPES:
         raise ValueError(
             f"No hay roles definidos para {position_group!r}. Los porteros se analizan "
-            "aparte, con sus propias metricas."
+            "aparte, con sus propias métricas."
         )
 
     arquetipos = ARCHETYPES[position_group]
@@ -311,7 +311,7 @@ def assign_all_roles(players: pd.DataFrame) -> pd.DataFrame:
             piezas.append(assign_roles(subconjunto, str(position_group)).assignments)
         except ValueError as error:
             logger.warning(
-                "Grupo de posicion sin roles asignados",
+                "Grupo de posición sin roles asignados",
                 extra={"position_group": position_group, "motivo": str(error)},
             )
             piezas.append(subconjunto.assign(detailed_position=None))

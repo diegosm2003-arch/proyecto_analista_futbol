@@ -125,6 +125,10 @@ def cached_squad(team: str, season: str, league: str) -> list[dict[str, Any]]:
     return _squad(data_version(), team, season, league)
 
 
+def cached_shots(player: str, season: str, team: str | None) -> dict[str, Any]:
+    return _shots(data_version(), player, season, team)
+
+
 def cached_similar(
     player: str, season: str, team: str | None, basis: str, limit: int
 ) -> dict[str, Any]:
@@ -206,3 +210,8 @@ def _squad(version: str, team: str, season: str, league: str) -> list[dict[str, 
 @st.cache_data(ttl=TTL_SECONDS)
 def _insights(version: str, season: str) -> list[dict[str, Any]]:
     return get_client().insights(season)
+
+
+@st.cache_data(ttl=TTL_SECONDS)
+def _shots(version: str, player: str, season: str, team: str | None) -> dict[str, Any]:
+    return get_client().player_shots(player=player, season=season, team=team)

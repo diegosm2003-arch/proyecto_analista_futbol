@@ -103,6 +103,9 @@ class FakeDataAccess:
         # Sin fichas de Transfermarkt cargadas, que es el estado por defecto.
         return {}
 
+    def shots(self, season: str, understat_id: str) -> list[dict]:
+        return []
+
 
 LIGAS = [
     "ESP-La Liga",
