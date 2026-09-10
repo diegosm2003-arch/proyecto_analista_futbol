@@ -38,14 +38,18 @@ from futbol_front.state import (
 from futbol_front.theme import Palette, apply
 from futbol_front.views import browse
 
-# Base de comparacion. Solo hay una porque el ajuste por posesion no tiene hoy
+# Bases de comparacion. El ajuste por posesion no esta porque no tiene hoy
 # ninguna metrica a la que aplicarse: divide por el tiempo SIN balon, que es la
 # correccion de una metrica defensiva, y el catalogo de Understat no trae
-# ninguna. Ofrecerlo devolvia un perfil con once metricas y cero percentiles, o
-# sea una pantalla en blanco.
+# ninguna. La maquinaria sigue en el backend para cuando entren.
 #
-# La maquinaria sigue en el backend, probada y lista: el dia que entren metricas
-# defensivas, aqui vuelve el conmutador.
+# Las dos que si estan responden a preguntas distintas y por eso se ofrecen las
+# dos en lugar de elegir una: lo observado dice lo que un jugador HA HECHO, y lo
+# corregido dice lo que se puede AFIRMAR de el con los minutos que lleva.
+BASES = {
+    "Lo observado": "per90",
+    "Corregido por minutos": "shrunk",
+}
 BASE_POR_90 = "per90"
 
 POBLACIONES = {
@@ -201,12 +205,25 @@ def _barra_de_filtros(
         with nombre_c:
             nombre = st.text_input("Nombre", placeholder="Busqueda parcial")
 
-        poblacion = st.radio(
-            "Comparar contra",
-            list(POBLACIONES),
-            horizontal=True,
-            help="El rol es más preciso, pero la población se reduce a un cuarto.",
-        )
+        poblacion_c, base_c = st.columns(2)
+        with poblacion_c:
+            poblacion = st.radio(
+                "Comparar contra",
+                list(POBLACIONES),
+                horizontal=True,
+                help="El rol es más preciso, pero la población se reduce a un cuarto.",
+            )
+        with base_c:
+            base = st.radio(
+                "Percentil",
+                list(BASES),
+                horizontal=True,
+                help=(
+                    "Lo corregido acerca el valor a la media de su posición cuando "
+                    "hay pocos minutos: de un jugador del que se sabe poco, lo más "
+                    "razonable que se puede afirmar es que se parece al resto."
+                ),
+            )
 
         _aviso_de_umbral(catalogo, temporada)
 
@@ -218,7 +235,7 @@ def _barra_de_filtros(
             "position_group": None if posicion == "Todas" else posicion,
             "name": nombre or None,
         },
-        BASE_POR_90,
+        BASES[base],
         POBLACIONES[poblacion],
     )
 
@@ -1010,8 +1027,9 @@ def _plantilla(templates: list[dict], position_group: str | None) -> list[dict]:
 def _subtitulo(perfil: dict) -> str:
     ficha = perfil["player"]
     rol = ficha["detailed_position"] or ficha["position_group"] or "sin posición"
+    base = "corregido por minutos" if perfil["basis"] == "shrunk" else "por 90 min"
     return (
-        f"{rol} | {presentation.season_label(ficha['season'])} | por 90 min | "
+        f"{rol} | {presentation.season_label(ficha['season'])} | {base} | "
         f"percentil frente a {perfil['population_size']} jugadores"
     )
 

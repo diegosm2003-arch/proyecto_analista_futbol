@@ -649,6 +649,33 @@ ningun futbolista ve una roja en una temporada: ese eje daba a toda la poblacion
 por identica e inflaba el parecido de todos, y ademas salia como explicacion
 —"se parecen en tarjetas rojas"— tapando lo que de verdad los acercaba.
 
+### Corregir el tamano de muestra, no solo avisarlo
+
+La plataforma avisaba de que un percentil con pocos minutos es fragil. El paso
+siguiente es corregirlo: en lugar del valor observado se puede usar uno
+contraido hacia la media de su posicion, con un peso que crece con los minutos.
+
+    ajustado = w * observado + (1 - w) * media,   con  w = minutos / (minutos + k)
+
+`k` son los minutos a los que la metrica ya pesa la mitad, y **no es igual para
+todas**. Ahi esta el futbol: los tiros ocurren varias veces por partido y con
+cinco o seis ya se sabe si alguien dispara mucho; los goles son eventos raros y
+la diferencia entre goles y xG no estabiliza ni en una temporada. Aplicar la
+misma constante trataria igual algo que se sabe en cuatro partidos y algo que no
+se sabe en cuarenta.
+
+Se calculan **las dos** y la interfaz deja elegir, porque responden a preguntas
+distintas: lo observado dice lo que un jugador ha hecho, lo corregido dice lo que
+se puede afirmar de el con los minutos que lleva.
+
+El efecto se ve en cuanto la muestra es corta. Umar Sadiq, con 151 minutos, pasa
+del percentil 82 al 58 en npxG; Nico Williams, con 188, apenas se mueve porque su
+valor bruto es lo bastante extremo para sostenerse.
+
+> Esto **no** convierte una muestra pequena en un dato bueno. La contraccion
+> reconoce la ignorancia, no la elimina: un delantero con 200 minutos sigue sin
+> ser comparable con uno de 2.500, pero su percentil deja de afirmar que lo es.
+
 ### Donde se sale de lo normal
 
 Un pizza chart ensena doce ejes a la vez y no dice por donde empezar. Debajo del

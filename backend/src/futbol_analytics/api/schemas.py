@@ -15,7 +15,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 PositionGroup = Literal["GK", "DF", "MF", "FW"]
-Basis = Literal["per90", "padj"]
+Basis = Literal["per90", "padj", "shrunk"]
 Population = Literal["position", "role"]
 
 

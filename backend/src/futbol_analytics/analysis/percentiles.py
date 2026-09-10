@@ -16,7 +16,7 @@ import logging
 
 import pandas as pd
 
-from futbol_analytics.analysis import features
+from futbol_analytics.analysis import features, shrinkage
 from futbol_analytics.metrics import Metric
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,11 @@ CONTEXT_COLUMNS = ("position_group", "detailed_position", "minutes")
 # mismo jugador en las dos versiones es, en si mismo, un hallazgo.
 BASIS_PER90 = "per90"
 BASIS_PADJ = "padj"
+# Valor por 90 contraido hacia la media de su poblacion segun los minutos
+# jugados. No sustituye al observado: se calculan los dos y la interfaz deja
+# elegir, porque son dos preguntas distintas —lo que ha hecho y lo que se puede
+# afirmar de el— y las dos son legitimas.
+BASIS_SHRUNK = "shrunk"
 
 
 def compute(
@@ -76,7 +81,7 @@ def compute(
         return _empty_result()
 
     interpretacion = {metric.name: metric.higher_is_better for metric in metrics}
-    for base in (BASIS_PER90, BASIS_PADJ):
+    for base in (BASIS_PER90, BASIS_PADJ, BASIS_SHRUNK):
         largo[f"percentile_{base}"] = _rank_within_population(
             largo, base, interpretacion, population_keys
         )
@@ -110,6 +115,14 @@ def _to_long(poblacion: pd.DataFrame, metrics: tuple[Metric, ...]) -> pd.DataFra
         # conmutador. Se fuerza a float para que el ranking no vea un object.
         ajustada = f"{metric.name}_padj"
         pieza[BASIS_PADJ] = poblacion[ajustada] if ajustada in poblacion.columns else float("nan")
+
+        # Valor contraido hacia la media de su grupo segun los minutos. Corrige
+        # lo que hasta ahora solo se avisaba: un percentil 91 con 135 minutos y
+        # otro con 2.500 no son lo mismo, y la plataforma los enseñaba igual.
+        contraible = poblacion[list(KEY_COLUMNS) + contexto].copy()
+        contraible[metric.name] = pieza[BASIS_PER90]
+        pieza[BASIS_SHRUNK] = shrinkage.shrink(contraible, metric.name, metric.name).to_numpy()
+
         pieza["higher_is_better"] = metric.higher_is_better
         piezas.append(pieza)
 
@@ -151,7 +164,9 @@ def _empty_result() -> pd.DataFrame:
         BASIS_PER90,
         BASIS_PADJ,
         "higher_is_better",
+        BASIS_SHRUNK,
         f"percentile_{BASIS_PER90}",
         f"percentile_{BASIS_PADJ}",
+        f"percentile_{BASIS_SHRUNK}",
     ]
     return pd.DataFrame(columns=columnas)
