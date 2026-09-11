@@ -28,6 +28,7 @@ DESTINO = "destino"
 JUGADORES = "jugadores"
 EQUIPOS = "equipos"
 SCOUTING = "scouting"
+CHAT = "chat"
 
 
 def ir_a(destino: str) -> None:
@@ -60,10 +61,10 @@ def render() -> None:
 
     # Estrechas y altas, con el icono arriba: una ficha ancha y baja se lee como
     # una barra de navegacion, no como una eleccion.
-    izquierda, centro, derecha = st.columns(3, gap="large")
+    jugadores, equipos, scouting, chat = st.columns(4, gap="large")
 
     _tarjeta(
-        izquierda,
+        jugadores,
         icono=ICONO_JUGADOR,
         titulo="Jugadores",
         texto=(
@@ -75,7 +76,7 @@ def render() -> None:
         principal=True,
     )
     _tarjeta(
-        centro,
+        equipos,
         icono=ICONO_EQUIPO,
         titulo="Equipos",
         texto=(
@@ -87,7 +88,7 @@ def render() -> None:
         principal=False,
     )
     _tarjeta(
-        derecha,
+        scouting,
         icono=ICONO_BUSCADOR,
         titulo="Scouting",
         texto=(
@@ -96,6 +97,18 @@ def render() -> None:
         ),
         etiqueta="Buscar jugadores",
         destino=SCOUTING,
+        principal=False,
+    )
+    _tarjeta(
+        chat,
+        icono=ICONO_CHAT,
+        titulo="Asistente",
+        texto=(
+            "Pregunta en lenguaje natural y recibe la misma respuesta que darían "
+            "estos datos en una pantalla, con las fuentes que ha consultado."
+        ),
+        etiqueta="Preguntar",
+        destino=CHAT,
         principal=False,
     )
 
@@ -135,6 +148,15 @@ ICONO_BUSCADOR = (
     '<circle cx="10.5" cy="10.5" r="6.5"/>'
     '<path d="M15.4 15.4L21 21"/>'
     '<path d="M7.6 10.5l2 2 3.8-4"/>'
+    "</svg>"
+)
+
+ICONO_CHAT = (
+    '<svg viewBox="0 0 24 24" width="56" height="56" fill="none" '
+    'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" '
+    'stroke-linejoin="round">'
+    '<path d="M4 5.5h16v10.5H9l-4 3.5v-3.5H4z"/>'
+    '<path d="M8 9.5h8M8 12.5h5"/>'
     "</svg>"
 )
 

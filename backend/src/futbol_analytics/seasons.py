@@ -30,3 +30,21 @@ def season_code(day: date) -> str:
 def current_season(today: date | None = None) -> str:
     """Temporada en curso."""
     return season_code(today or date.today())
+
+
+def season_label(season: str) -> str:
+    """Temporada en el formato con el que se habla de ella.
+
+    El codigo de cuatro digitos es lo que espera la fuente, pero nadie dice
+    "la dos seis dos siete": se dice 26/27. La barra ademas evita el otro
+    problema del codigo crudo, que a primera vista parece un ano suelto o un
+    identificador interno.
+
+    >>> season_label("2627")
+    '26/27'
+    >>> season_label("raro")
+    'raro'
+    """
+    if len(season) == 4 and season.isdigit():
+        return f"{season[:2]}/{season[2:]}"
+    return season

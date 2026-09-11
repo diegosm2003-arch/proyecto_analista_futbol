@@ -141,3 +141,72 @@ def test_si_la_api_no_contesta_la_version_no_revienta_la_interfaz(
     monkeypatch.setattr(state, "cached_health", revienta)
 
     assert state.data_version() == state.UNKNOWN_VERSION
+
+
+# --- Asistente ----------------------------------------------------------------
+
+
+@pytest.fixture
+def llamadas_post(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    """Captura las peticiones POST en lugar de hacerlas."""
+    registro: list[dict] = []
+
+    def falso_post(url: str, json: dict | None = None, timeout: int | None = None):
+        registro.append({"url": url, "json": json, "timeout": timeout})
+        return RespuestaFalsa(payload={"reply": "ok", "tools_used": []})
+
+    monkeypatch.setattr(modulo.requests, "post", falso_post)
+    return registro
+
+
+def test_chat_status_es_una_peticion_get(llamadas: list[dict]) -> None:
+    ApiClient("http://api:8000").chat_status()
+
+    assert llamadas[0]["url"] == "http://api:8000/chat"
+
+
+def test_ask_chat_manda_la_pregunta_la_temporada_y_el_historial(
+    llamadas_post: list[dict],
+) -> None:
+    historial = [{"role": "user", "content": "hola"}]
+
+    ApiClient("http://api:8000").ask_chat("¿Cómo va Pedri?", "2627", historial)
+
+    cuerpo = llamadas_post[0]["json"]
+    assert cuerpo["question"] == "¿Cómo va Pedri?"
+    assert cuerpo["season"] == "2627"
+    assert cuerpo["history"] == historial
+
+
+def test_ask_chat_sin_historial_manda_una_lista_vacia(llamadas_post: list[dict]) -> None:
+    ApiClient("http://api:8000").ask_chat("¿Cómo va Pedri?", "2627")
+
+    assert llamadas_post[0]["json"]["history"] == []
+
+
+def test_ask_chat_usa_el_timeout_largo_del_modelo_local(llamadas_post: list[dict]) -> None:
+    # El timeout normal (20s) basta para un percentil, no para un modelo en
+    # CPU: usar el mismo dejaria el chat fallando por impaciencia y no por que
+    # el modelo no responda.
+    ApiClient("http://api:8000", timeout=20).ask_chat("¿Cómo va Pedri?", "2627")
+
+    assert llamadas_post[0]["timeout"] == modulo.CHAT_TIMEOUT
+    assert modulo.CHAT_TIMEOUT > 20
+
+
+def test_ask_chat_devuelve_la_respuesta_deserializada(llamadas_post: list[dict]) -> None:
+    respuesta = ApiClient("http://api:8000").ask_chat("¿Cómo va Pedri?", "2627")
+
+    assert respuesta == {"reply": "ok", "tools_used": []}
+
+
+def test_si_el_modelo_no_responde_el_post_tambien_se_traduce(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def falla(*_a, **_k):
+        raise requests.ConnectionError("connection refused")
+
+    monkeypatch.setattr(modulo.requests, "post", falla)
+
+    with pytest.raises(ApiError, match="No se ha podido contactar"):
+        ApiClient("http://api:8000").ask_chat("¿Cómo va Pedri?", "2627")

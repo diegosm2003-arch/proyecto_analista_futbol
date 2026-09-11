@@ -92,6 +92,42 @@ class PizzaTemplate(BaseModel):
     slices: list[TemplateSlice]
 
 
+class ChatMessage(BaseModel):
+    """Un turno anterior de la conversacion."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatQuestion(BaseModel):
+    """Lo que se le pregunta al asistente."""
+
+    question: str = Field(min_length=1, max_length=500)
+    season: str
+    history: list[ChatMessage] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Turnos previos. Se acota porque un modelo pequeno se pierde",
+    )
+
+
+class ChatAnswer(BaseModel):
+    """La respuesta, con las fuentes que ha consultado."""
+
+    reply: str
+    tools_used: list[str] = Field(
+        default_factory=list,
+        description="Herramientas consultadas. Es lo que hace la respuesta comprobable",
+    )
+
+
+class ChatStatus(BaseModel):
+    """Si el modelo local esta listo."""
+
+    available: bool
+    model: str
+
+
 class Catalog(BaseModel):
     """Que hay disponible en la plataforma."""
 

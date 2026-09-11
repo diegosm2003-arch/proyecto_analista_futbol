@@ -49,6 +49,17 @@ def get_client() -> ApiClient:
 
 
 @st.cache_data(ttl=VERSION_TTL_SECONDS)
+def cached_chat_status() -> dict[str, Any]:
+    """Si el asistente esta disponible.
+
+    Con la misma vida corta que `cached_health`: preguntarlo en cada pasada del
+    script tumbaria un chat que ademas ya tarda por si solo, y a la vez hace
+    falta saber pronto si Ollama se ha caido a media sesion.
+    """
+    return get_client().chat_status()
+
+
+@st.cache_data(ttl=VERSION_TTL_SECONDS)
 def cached_health() -> dict[str, Any]:
     """Estado de la API: version del dato y resultado de la ultima carga.
 

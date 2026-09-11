@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from futbol_analytics import __version__
 from futbol_analytics.api import cache
 from futbol_analytics.api.dependencies import DataAccessDep, get_data_access
-from futbol_analytics.api.routers import meta, players, teams
+from futbol_analytics.api.routers import chat, meta, players, teams
 from futbol_analytics.api.schemas import Health
 from futbol_analytics.logging_config import configure_logging
 
@@ -84,6 +84,9 @@ app = FastAPI(
 app.include_router(meta.router)
 app.include_router(players.router)
 app.include_router(teams.router)
+# El chat va aparte y al final: es opcional, depende de un servicio externo
+# y es el unico endpoint cuya respuesta no es reproducible.
+app.include_router(chat.router)
 
 
 @app.exception_handler(SQLAlchemyError)

@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 20
 
+# El modelo local puede tardar minutos en CPU. Un timeout aparte para el chat
+# evita que una pregunta normal falle por agotar el limite corto que basta para
+# cualquier otro endpoint, que no tiene motivo para tardar tanto.
+CHAT_TIMEOUT = 200
+
 
 class ApiError(RuntimeError):
     """La API ha respondido con un error o no ha respondido.
@@ -171,6 +176,26 @@ class ApiClient:
             params={"season": season, "league": league, "n_styles": n_styles},
         )
 
+    # --- Asistente ----------------------------------------------------------
+
+    def chat_status(self) -> dict[str, Any]:
+        """Si el modelo local esta disponible."""
+        return self._get("/chat")
+
+    def ask_chat(
+        self,
+        question: str,
+        season: str,
+        history: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        """Pregunta al asistente. Aparte de `_get` porque necesita el timeout
+        largo del modelo local y porque manda cuerpo JSON, no query params."""
+        return self._post(
+            "/chat",
+            {"question": question, "season": season, "history": history or []},
+            timeout=CHAT_TIMEOUT,
+        )
+
     # --- Interno ----------------------------------------------------------
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
@@ -181,6 +206,20 @@ class ApiClient:
 
         try:
             respuesta = requests.get(f"{self.base_url}{path}", params=limpios, timeout=self.timeout)
+        except requests.RequestException as error:
+            raise ApiError(f"No se ha podido contactar con la API: {error}") from error
+
+        if respuesta.status_code >= 400:
+            raise ApiError(_detail(respuesta), status_code=respuesta.status_code)
+
+        return respuesta.json()
+
+    def _post(self, path: str, body: dict[str, Any], timeout: int | None = None) -> Any:
+        """Peticion POST con los errores traducidos a `ApiError`, igual que `_get`."""
+        try:
+            respuesta = requests.post(
+                f"{self.base_url}{path}", json=body, timeout=timeout or self.timeout
+            )
         except requests.RequestException as error:
             raise ApiError(f"No se ha podido contactar con la API: {error}") from error
 

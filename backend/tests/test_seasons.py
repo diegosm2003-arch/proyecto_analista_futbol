@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from futbol_analytics.seasons import current_season, season_code
+from futbol_analytics.seasons import current_season, season_code, season_label
 
 
 @pytest.mark.parametrize(
@@ -38,3 +38,13 @@ def test_current_season_usa_la_fecha_de_hoy_por_defecto() -> None:
 
 def test_current_season_acepta_una_fecha() -> None:
     assert current_season(date(2026, 9, 8)) == "2627"
+
+
+def test_season_label_pone_la_barra_con_la_que_se_habla() -> None:
+    assert season_label("2627") == "26/27"
+
+
+def test_season_label_deja_igual_lo_que_no_tiene_forma_de_codigo() -> None:
+    # El chat puede recibir cualquier cosa del modelo; season_label no debe
+    # reventar ni inventar una barra donde no hay un codigo de temporada.
+    assert season_label("raro") == "raro"
